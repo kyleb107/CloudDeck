@@ -196,6 +196,24 @@ public class MainApp extends Application {
         Label weatherLabel = makeInfoLabel(String.format(
                 "Temp: %.1f°F (%.1f°C)  |  Visibility: %.1f SM", tempF, metar.getTempC(), metar.getVisibSM()
         ));
+
+        //===== VFR MINIMUMS CHECK =====
+        //VFR minimums: 3SM visibility and 1000ft ceiling
+        String vfrStatus = checkVfrMinimums(metar);
+        Label vfrLabel = new Label(vfrStatus);
+        vfrLabel.setWrapText(true);
+
+        //color based on status
+        if (vfrStatus.contains("CAUTION")) {
+            vfrLabel.setStyle("-fx-text-fill: #ffaa00; -fx-font-size: 13px; -fx-font-weight: bold;");
+        }
+        else if (vfrStatus.contains("WARNING")) {
+            vfrLabel.setStyle("-fx-text-fill: #ff4444; -fx-font-size: 13px; -fx-font-weight: bold;");
+        }
+        else {
+            vfrLabel.setStyle("-fx-text-fill: #00cc44; -fx-font-size: 13px;");
+        }
+
         Label timeLabel = makeInfoLabel("Observation: " + metar.getObservationTime().replace("T", " ").replace(".000Z", "Z"));
         Label rawLabel = makeInfoLabel("Raw: " + metar.getRawOb());
         rawLabel.setTextFill(Color.web("#666666"));
@@ -206,7 +224,7 @@ public class MainApp extends Application {
         VBox runwaySection = buildRunwaySection(metar, runways, categoryColor);
 
         //assemble card
-        card.getChildren().addAll(headerRow, windLabel, altLabel, weatherLabel, timeLabel, rawLabel, runwaySection);        return card;
+        card.getChildren().addAll(headerRow, windLabel, altLabel, weatherLabel, vfrLabel, timeLabel, rawLabel, runwaySection);        return card;
     }
 
     //===== RUNWAY SECTION BUILDER =====
@@ -321,6 +339,49 @@ public class MainApp extends Application {
         label.setFont(Font.font("Arial", 13));
         label.setWrapText(true);
         return label;
+    }
+
+    //VFR MINIMUMS CHECKER
+    private String checkVfrMinimums(MetarData metar) {
+        float visibility = metar.getVisibSM();
+
+        //find lowest ceiling from cloud layers
+        int lowestCeiling = Integer.MAX_VALUE;
+        String clouds = metar.getCloudLayers();
+
+        //only BKN and OVC count as ceiling
+        if (clouds.contains("BKN") || clouds.contains("OVC")) {
+            String[] layers = clouds.split(", ");
+            for (String layer : layers) {
+                if (layer.contains("BKN") || layer.contains("OVC")) {
+                    try {
+                        //ex: "BKN at 4500ft" — extract the number
+                        String numStr = layer.replaceAll("[^0-9]", "");
+                        if (!numStr.isEmpty()) {
+                            int alt = Integer.parseInt(numStr);
+                            if (alt < lowestCeiling) lowestCeiling = alt;
+                        }
+                    }
+                    catch (NumberFormatException ignored) {}
+                }
+            }
+        }
+
+        //check conditions
+        boolean lowVisibility = visibility < 3.0f;
+        boolean lowCeiling = lowestCeiling < 1000;
+        boolean marginalVisibility = visibility >= 3.0f && visibility < 5.0f;
+        boolean marginalCeiling = lowestCeiling >= 1000 && lowestCeiling < 3000;
+
+        if (lowVisibility || lowCeiling) {
+            return "⚠ WARNING: Below VFR minimums — IFR conditions";
+        }
+        else if (marginalVisibility || marginalCeiling) {
+            return "⚠ CAUTION: Marginal VFR conditions";
+        }
+        else {
+            return "✓ VFR conditions meet minimums";
+        }
     }
 
     private String formatCrosswindResult(double[] components) {
