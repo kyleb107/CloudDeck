@@ -1,5 +1,5 @@
 /* Designed by: Kyle Barnes
-   Fetches runway headings using the OurAirports public CSV dataset
+   Fetches runway headings from the OurAirports public CSV dataset
  */
 
 import java.net.URI;
@@ -11,11 +11,13 @@ import java.util.List;
 
 public class RunwayFetcher {
 
-    //ourairports runway CSV — free, no API key, updated daily
+    //===== CONSTANTS =====
+    //free, no API key required, updated daily by OurAirports
     private static final String RUNWAY_CSV_URL =
             "https://davidmegginson.github.io/ourairports-data/runways.csv";
 
-    //cache the CSV so we only download it once per session
+    //===== CACHE =====
+    //store CSV in memory so we only download it once per session (~4MB)
     private static String csvCache = null;
 
     private static String getRunwayCsv() throws Exception {
@@ -30,18 +32,18 @@ public class RunwayFetcher {
         return csvCache;
     }
 
+    //===== FETCH RUNWAYS =====
+    //CSV column reference:
+    //col 2  = airport_ident
+    //col 7  = closed (1 = closed, skip)
+    //col 8  = le_ident       col 12 = le_heading_degT
+    //col 14 = he_ident       col 18 = he_heading_degT
     public List<Runway> fetchRunways(String icaoId) {
         List<Runway> runways = new ArrayList<>();
 
         try {
             String csv = getRunwayCsv();
             String[] lines = csv.split("\n");
-
-            //CSV columns: id,airport_ref,airport_ident,length_ft,width_ft,surface,
-            //             lighted,closed,le_ident,le_latitude_deg,le_longitude_deg,
-            //             le_elevation_ft,le_heading_degT,le_displaced_threshold_ft,
-            //             he_ident,he_latitude_deg,he_longitude_deg,he_elevation_ft,
-            //             he_heading_degT,he_displaced_threshold_ft
 
             for (int i = 1; i < lines.length; i++) {
                 String line = lines[i].trim();
@@ -50,36 +52,30 @@ public class RunwayFetcher {
                 String[] cols = line.split(",", -1);
                 if (cols.length < 19) continue;
 
-                //col 2 is airport_ident
+                //skip if not the requested airport
                 String ident = cols[2].replace("\"", "").trim();
                 if (!ident.equalsIgnoreCase(icaoId)) continue;
 
-                //col 7 is closed — skip closed runways
+                //skip closed runways
                 String closed = cols[7].replace("\"", "").trim();
                 if (closed.equals("1")) continue;
 
-                //col 8 is le_ident, col 12 is le_heading_degT
+                //parse low end runway
                 String leIdent = cols[8].replace("\"", "").trim();
                 String leHeadingStr = cols[12].replace("\"", "").trim();
-
-                //col 14 is he_ident, col 18 is he_heading_degT
-                String heIdent = cols[14].replace("\"", "").trim();
-                String heHeadingStr = cols[18].replace("\"", "").trim();
-
-                //add low end runway if valid
                 if (!leIdent.isEmpty() && !leHeadingStr.isEmpty()) {
                     try {
-                        int leHeading = (int) Double.parseDouble(leHeadingStr);
-                        runways.add(new Runway(leIdent, leHeading));
+                        runways.add(new Runway(leIdent, (int) Double.parseDouble(leHeadingStr)));
                     }
                     catch (NumberFormatException ignored) {}
                 }
 
-                //add high end runway if valid
+                //parse high end runway
+                String heIdent = cols[14].replace("\"", "").trim();
+                String heHeadingStr = cols[18].replace("\"", "").trim();
                 if (!heIdent.isEmpty() && !heHeadingStr.isEmpty()) {
                     try {
-                        int heHeading = (int) Double.parseDouble(heHeadingStr);
-                        runways.add(new Runway(heIdent, heHeading));
+                        runways.add(new Runway(heIdent, (int) Double.parseDouble(heHeadingStr)));
                     }
                     catch (NumberFormatException ignored) {}
                 }

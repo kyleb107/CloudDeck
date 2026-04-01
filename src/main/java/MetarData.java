@@ -1,21 +1,27 @@
 /* Designed by: Kyle Barnes
-   Collects METAR Weather Data, holds parsed METAR for a single airport
+   Data class — holds all parsed METAR fields for a single airport
  */
 
 public class MetarData {
+
+    //===== FIELDS =====
     private String airportId;
     private String rawOb;
     private String observationTime;
-    private String cloudLayers;
     private int windDir;
     private int windSpeed;
     private int windGust;
     private float altimeter;
-    private String flightCategory; //VFR, IFR, etc.
+    private String flightCategory;
+    private String cloudLayers;
     private float tempC;
     private float visibSM;
 
-    public MetarData(String airportId, String rawOb, String observationTime, int windDir, int windSpeed, int windGust, float altimeter, String flightCategory, String cloudLayers, float tempC, float visibSM) {
+    //===== CONSTRUCTOR =====
+    public MetarData(String airportId, String rawOb, String observationTime,
+                     int windDir, int windSpeed, int windGust,
+                     float altimeter, String flightCategory, String cloudLayers,
+                     float tempC, float visibSM) {
         this.airportId = airportId;
         this.rawOb = rawOb;
         this.observationTime = observationTime;
@@ -29,9 +35,9 @@ public class MetarData {
         this.visibSM = visibSM;
     }
 
-    //getters
-    public String getAirportId() {return airportId; }
-    public String getRawOb() {return rawOb; }
+    //===== GETTERS =====
+    public String getAirportId() { return airportId; }
+    public String getRawOb() { return rawOb; }
     public String getObservationTime() { return observationTime; }
     public int getWindDir() { return windDir; }
     public int getWindSpeed() { return windSpeed; }
@@ -39,9 +45,10 @@ public class MetarData {
     public float getAltimeter() { return altimeter; }
     public String getFlightCategory() { return flightCategory; }
     public String getCloudLayers() { return cloudLayers; }
-    public float getTempC() {return tempC;}
-    public float getVisibSM() {return visibSM;}
+    public float getTempC() { return tempC; }
+    public float getVisibSM() { return visibSM; }
 
+    //===== TO STRING =====
     @Override
     public String toString() {
         String windString = windGust > 0

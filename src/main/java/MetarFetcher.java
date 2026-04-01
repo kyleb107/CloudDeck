@@ -1,5 +1,5 @@
 /* Designed by: Kyle Barnes
-   Fetches raw METAR JSON Weather Data from FAA Aviation Weather API
+   Fetches raw METAR JSON from the FAA Aviation Weather API
  */
 
 import org.json.JSONArray;
@@ -9,10 +9,15 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
 public class MetarFetcher {
-    private static final String BASE_URL = "https://aviationweather.gov/api/data/metar?ids=%s&format=json";
 
-    public JSONArray fetchRaw(String icaoId) throws Exception {
-        String url = String.format(BASE_URL, icaoId.toUpperCase());
+    //===== CONSTANTS =====
+    //accepts comma-separated ICAO IDs ex: KDFW,KAUS,KLFK
+    private static final String BASE_URL =
+            "https://aviationweather.gov/api/data/metar?ids=%s&format=json";
+
+    //===== FETCH =====
+    public JSONArray fetchRaw(String icaoIds) throws Exception {
+        String url = String.format(BASE_URL, icaoIds.toUpperCase());
 
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
@@ -23,7 +28,7 @@ public class MetarFetcher {
 
         JSONArray jsonArray = new JSONArray(response.body());
         if (jsonArray.isEmpty()) {
-            throw new Exception("No METAR data found for station: " + icaoId);
+            throw new Exception("No METAR data found for: " + icaoIds);
         }
 
         return jsonArray;
