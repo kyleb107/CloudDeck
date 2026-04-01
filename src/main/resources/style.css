@@ -1,0 +1,18 @@
+.text-area {
+    -fx-background-color: #1e1e1e;
+    -fx-text-fill: #d4d4d4;
+    -fx-font-family: "Courier New";
+    -fx-font-size: 13px;
+}
+
+.text-area .content {
+    -fx-background-color: #1e1e1e;
+}
+
+.text-area .scroll-pane {
+    -fx-background-color: #1e1e1e;
+}
+
+.text-area .scroll-pane .viewport {
+    -fx-background-color: #1e1e1e;
+}
