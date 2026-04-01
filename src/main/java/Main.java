@@ -13,6 +13,7 @@ public class Main {
         System.out.println("=== Aviation Weather Tracker ===");
 
         while (true) {
+            //METAR INITIALIZATION
             System.out.print("Enter ICAO station ID (or 'quit' to exit): ");
             String input = scanner.nextLine().trim();
 
@@ -25,6 +26,14 @@ public class Main {
                 MetarData metar = parser.parse(fetcher.fetchRaw(input));
                 System.out.println("\n" + metar.toString());
                 System.out.println("Raw METAR: " + metar.getRawOb() + "\n");
+
+                //CROSSWIND CALCULATION
+                System.out.print("Enter runway heading for crosswind calculation (1-36 or 0 to skip): ");
+                int runway = Integer.parseInt(scanner.nextLine().trim());
+
+                if (runway != 0) {
+                    CrosswindCalculator.printComponents(runway * 10, metar.getWindDir(), metar.getWindSpeed());
+                }
             }
             //error, invalid metar
             catch (Exception e) {
