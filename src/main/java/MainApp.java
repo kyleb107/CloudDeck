@@ -14,7 +14,6 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -159,16 +158,25 @@ public class MainApp extends Application {
 
         //===== HEADER ROW =====
         //colored dot indicating flight category
+        String colorHex = String.format("#%02X%02X%02X",
+                (int)(categoryColor.getRed() * 255),
+                (int)(categoryColor.getGreen() * 255),
+                (int)(categoryColor.getBlue() * 255)
+        );
+
+        //colored dot indicating flight category
         Label dot = new Label("●");
-        dot.setTextFill(categoryColor);
-        dot.setFont(Font.font("Arial", FontWeight.BOLD, 20));
+        dot.setStyle("-fx-text-fill: " + colorHex + "; -fx-font-size: 20px; -fx-font-weight: bold;");
 
-        //airport ID and category
-        Label airportLabel = new Label(metar.getAirportId() + " — " + category);
-        airportLabel.setTextFill(Color.WHITE);
-        airportLabel.setFont(Font.font("Arial", FontWeight.BOLD, 18));
+        //airport ID
+        Label airportLabel = new Label(metar.getAirportId() + " — ");
+        airportLabel.setStyle("-fx-text-fill: white; -fx-font-size: 18px; -fx-font-weight: bold;");
 
-        HBox headerRow = new HBox(8, dot, airportLabel);
+        //colored flight category label
+        Label categoryLabel = new Label(category);
+        categoryLabel.setStyle("-fx-text-fill: " + colorHex + "; -fx-font-size: 18px; -fx-font-weight: bold;");
+
+        HBox headerRow = new HBox(8, dot, airportLabel, categoryLabel);
         headerRow.setAlignment(Pos.CENTER_LEFT);
 
         //===== WEATHER INFO =====
@@ -190,7 +198,7 @@ public class MainApp extends Application {
         rawLabel.setWrapText(true);
 
         //===== RUNWAY SECTION =====
-        VBox runwaySection = buildRunwaySection(metar, runways);
+        VBox runwaySection = buildRunwaySection(metar, runways, categoryColor);
 
         //assemble card
         card.getChildren().addAll(headerRow, windLabel, altLabel, timeLabel, rawLabel, runwaySection);
@@ -198,7 +206,7 @@ public class MainApp extends Application {
     }
 
     //===== RUNWAY SECTION BUILDER =====
-    private VBox buildRunwaySection(MetarData metar, List<Runway> runways) {
+    private VBox buildRunwaySection(MetarData metar, List<Runway> runways, Color categoryColor) {
         VBox section = new VBox(6);
         section.setPadding(new Insets(8, 0, 0, 0));
 
@@ -273,7 +281,7 @@ public class MainApp extends Application {
             String side = components[1] >= 0 ? "R" : "L";
 
             boolean isBest = (i == 0);
-            String prefix = isBest ? "✅ Best  " : "        ";
+            String prefix = isBest ? ">> Best  " : "        ";
             String hwLabel = headwind >= 0
                     ? String.format("HW: %.1f kts", headwind)
                     : String.format("TW: %.1f kts", Math.abs(headwind));
@@ -284,8 +292,18 @@ public class MainApp extends Application {
             );
 
             Label rwyLabel = new Label(runwayText);
-            rwyLabel.setFont(Font.font("Courier New", 13));
-            rwyLabel.setTextFill(isBest ? Color.web("#00cc44") : Color.web("#cccccc"));
+
+            if (isBest) {
+                String colorHex = String.format("#%02X%02X%02X",
+                        (int)(categoryColor.getRed() * 255),
+                        (int)(categoryColor.getGreen() * 255),
+                        (int)(categoryColor.getBlue() * 255)
+                );
+                rwyLabel.setStyle("-fx-text-fill: " + colorHex + "; -fx-font-family: 'Courier New'; -fx-font-size: 13px; -fx-font-weight: bold;");
+            }
+            else {
+                rwyLabel.setStyle("-fx-text-fill: #cccccc; -fx-font-family: 'Courier New'; -fx-font-size: 13px;");
+            }
             section.getChildren().add(rwyLabel);
         }
 
