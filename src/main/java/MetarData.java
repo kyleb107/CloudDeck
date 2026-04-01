@@ -6,6 +6,7 @@ public class MetarData {
 
     //===== FIELDS =====
     private String airportId;
+    private String airportName;
     private String rawOb;
     private String observationTime;
     private int windDir;
@@ -18,11 +19,12 @@ public class MetarData {
     private float visibSM;
 
     //===== CONSTRUCTOR =====
-    public MetarData(String airportId, String rawOb, String observationTime,
+    public MetarData(String airportId, String airportName, String rawOb, String observationTime,
                      int windDir, int windSpeed, int windGust,
                      float altimeter, String flightCategory, String cloudLayers,
                      float tempC, float visibSM) {
         this.airportId = airportId;
+        this.airportName = airportName;
         this.rawOb = rawOb;
         this.observationTime = observationTime;
         this.windDir = windDir;
@@ -37,6 +39,7 @@ public class MetarData {
 
     //===== GETTERS =====
     public String getAirportId() { return airportId; }
+    public String getAirportName() {return airportName; }
     public String getRawOb() { return rawOb; }
     public String getObservationTime() { return observationTime; }
     public int getWindDir() { return windDir; }

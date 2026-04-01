@@ -11,6 +11,7 @@ public class MetarParser {
 
         //===== BASIC FIELDS =====
         String stationId = json.optString("icaoId", "UNKNOWN");
+        String airportName = json.optString("name", "");
         String rawOb = json.optString("rawOb", "");
         String observationTime = json.optString("reportTime", "");
         String flightCategory = json.optString("fltCat", "UNKNOWN");
@@ -55,7 +56,7 @@ public class MetarParser {
         }
 
         //===== RETURN =====
-        return new MetarData(stationId, rawOb, observationTime,
+        return new MetarData(stationId, airportName, rawOb, observationTime,
                 windDir, windSpeed, windGust,
                 altimeter, flightCategory, cloudLayers,
                 tempC, visibSM);

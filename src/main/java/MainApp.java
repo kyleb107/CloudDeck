@@ -118,14 +118,28 @@ public class MainApp extends Application {
         HBox inputRow = new HBox(10, airportInput, fetchButton);
         inputRow.setAlignment(Pos.CENTER);
 
-        VBox root = new VBox(10, title, subtitle, inputRow, statusLabel, scrollPane);
-        root.setPadding(new Insets(20));
-        root.setAlignment(Pos.TOP_CENTER);
-        root.setStyle("-fx-background-color: #121212;");
+        VBox weatherPane = new VBox(10, title, subtitle, inputRow, statusLabel, scrollPane);
+        weatherPane.setPadding(new Insets(20));
+        weatherPane.setAlignment(Pos.TOP_CENTER);
+        weatherPane.setStyle("-fx-background-color: #121212;");
+
+        //route planner pane
+        ScrollPane routeScroll = new ScrollPane(buildRoutePlanner());
+        routeScroll.setFitToWidth(true);
+        routeScroll.setStyle("-fx-background-color: #121212; -fx-background: #121212;");
+
+        //tab pane
+        Tab weatherTab = new Tab("Weather", weatherPane);
+        weatherTab.setClosable(false);
+
+        Tab routeTab = new Tab("Route Planner", routeScroll);
+        routeTab.setClosable(false);
+
+        TabPane tabPane = new TabPane(weatherTab, routeTab);
+        tabPane.setStyle("-fx-background-color: #121212;");
 
         //===== SCENE =====
-        Scene scene = new Scene(root, 750, 620);
-        scene.getStylesheets().add(getClass().getResource("/style.css").toExternalForm());
+        Scene scene = new Scene(tabPane, 800, 660);        scene.getStylesheets().add(getClass().getResource("/style.css").toExternalForm());
         stage.setTitle("CloudDeck");
         stage.setScene(scene);
         stage.show();
@@ -170,6 +184,10 @@ public class MainApp extends Application {
 
         HBox headerRow = new HBox(8, dot, airportLabel, categoryLabel);
         headerRow.setAlignment(Pos.CENTER_LEFT);
+
+        //airport full name shown below the ICAO ID (if available)
+        Label nameLabel = makeInfoLabel(metar.getAirportName());
+        nameLabel.setStyle("-fx-text-fill: #aaaaaa; -fx-font-size: 15px; -fx-font-style: bold;");
 
         //===== WEATHER LABELS =====
         //wind — include gusts if present
@@ -219,10 +237,170 @@ public class MainApp extends Application {
 
         //assemble card
         card.getChildren().addAll(
-                headerRow, windLabel, altLabel, weatherLabel,
+                headerRow, nameLabel, windLabel, altLabel, weatherLabel,
                 vfrLabel, timeLabel, rawLabel, runwaySection
         );
         return card;
+    }
+
+    //===== ROUTE PLANNER =====
+//builds a route planner section with departure and destination inputs
+    public VBox buildRoutePlanner() {
+        VBox routePane = new VBox(12);
+        routePane.setPadding(new Insets(10));
+
+        //===== HEADER =====
+        Label routeTitle = new Label("Route Planner");
+        routeTitle.setStyle("-fx-text-fill: #4ea8de; -fx-font-size: 18px; -fx-font-weight: bold;");
+
+        Label routeSubtitle = makeInfoLabel("Enter departure and destination to get a VFR go/no-go recommendation.");
+        routeSubtitle.setStyle("-fx-text-fill: #888888; -fx-font-size: 12px;");
+
+        //===== INPUT ROW =====
+        TextField depInput = new TextField();
+        depInput.setPromptText("Departure ex: KLFK");
+        depInput.setMaxWidth(180);
+        depInput.setStyle(
+                "-fx-background-color: #2a2a2a; -fx-text-fill: white; " +
+                        "-fx-prompt-text-fill: #666666; -fx-font-size: 13px; -fx-padding: 8px;"
+        );
+
+        Label arrowLabel = new Label("→");
+        arrowLabel.setStyle("-fx-text-fill: #888888; -fx-font-size: 18px;");
+
+        TextField destInput = new TextField();
+        destInput.setPromptText("Destination ex: KDFW");
+        destInput.setMaxWidth(180);
+        destInput.setStyle(
+                "-fx-background-color: #2a2a2a; -fx-text-fill: white; " +
+                        "-fx-prompt-text-fill: #666666; -fx-font-size: 13px; -fx-padding: 8px;"
+        );
+
+        Button planButton = new Button("Check Route");
+        planButton.setStyle(
+                "-fx-background-color: #4ea8de; -fx-text-fill: white; " +
+                        "-fx-font-size: 13px; -fx-padding: 8px 16px; -fx-cursor: hand;"
+        );
+
+        HBox inputRow = new HBox(10, depInput, arrowLabel, destInput, planButton);
+        inputRow.setAlignment(Pos.CENTER_LEFT);
+
+        //===== RESULTS =====
+        VBox resultsBox = new VBox(10);
+        Label statusLabel = new Label("");
+        statusLabel.setStyle("-fx-text-fill: #888888; -fx-font-size: 13px;");
+        resultsBox.getChildren().add(statusLabel);
+
+        //===== BUTTON ACTION =====
+        planButton.setOnAction(e -> {
+            String dep = depInput.getText().trim().toUpperCase();
+            String dest = destInput.getText().trim().toUpperCase();
+
+            if (dep.isEmpty() || dest.isEmpty()) {
+                statusLabel.setText("Please enter both a departure and destination.");
+                return;
+            }
+
+            statusLabel.setText("Fetching route weather data...");
+            resultsBox.getChildren().clear();
+            resultsBox.getChildren().add(statusLabel);
+
+            new Thread(() -> {
+                try {
+                    //fetch both METARs at once
+                    JSONArray results = fetcher.fetchRaw(dep + "," + dest);
+                    List<MetarData> metarList = new ArrayList<>();
+
+                    for (int i = 0; i < results.length(); i++) {
+                        metarList.add(parser.parse(results.getJSONObject(i)));
+                    }
+
+                    //sort so departure is always first
+                    metarList.sort((a, b) -> {
+                        if (a.getAirportId().equals(dep)) return -1;
+                        if (b.getAirportId().equals(dep)) return 1;
+                        return 0;
+                    });
+
+                    //build recommendation
+                    String recommendation = buildRouteRecommendation(metarList, dep, dest);
+
+                    //build cards for both airports
+                    List<VBox> cards = new ArrayList<>();
+                    for (MetarData metar : metarList) {
+                        List<Runway> runways = runwayFetcher.fetchRunways(metar.getAirportId());
+                        cards.add(buildAirportCard(metar, runways));
+                    }
+
+                    Platform.runLater(() -> {
+                        resultsBox.getChildren().clear();
+
+                        //recommendation banner
+                        Label recLabel = new Label(recommendation);
+                        recLabel.setWrapText(true);
+                        recLabel.setStyle(recommendation.contains("GO —")
+                                ? "-fx-text-fill: #00cc44; -fx-font-size: 15px; -fx-font-weight: bold;"
+                                : recommendation.contains("NO-GO")
+                                ? "-fx-text-fill: #ff4444; -fx-font-size: 15px; -fx-font-weight: bold;"
+                                : "-fx-text-fill: #ffaa00; -fx-font-size: 15px; -fx-font-weight: bold;");
+
+                        resultsBox.getChildren().add(recLabel);
+                        resultsBox.getChildren().addAll(cards);
+                    });
+                }
+                catch (Exception ex) {
+                    Platform.runLater(() -> statusLabel.setText("Error: " + ex.getMessage()));
+                }
+            }).start();
+        });
+
+        //assemble route pane
+        routePane.getChildren().addAll(routeTitle, routeSubtitle, inputRow, resultsBox);
+        return routePane;
+    }
+
+    //===== ROUTE RECOMMENDATION BUILDER =====
+    private String buildRouteRecommendation(List<MetarData> metarList, String dep, String dest) {
+        boolean depOk = true;
+        boolean destOk = true;
+        boolean depMarginal = false;
+        boolean destMarginal = false;
+
+        for (MetarData metar : metarList) {
+            String status = checkVfrMinimums(metar);
+            boolean isDep = metar.getAirportId().equals(dep);
+
+            if (status.contains("WARNING")) {
+                if (isDep) depOk = false;
+                else destOk = false;
+            }
+            else if (status.contains("CAUTION")) {
+                if (isDep) depMarginal = true;
+                else destMarginal = true;
+            }
+        }
+
+        if (!depOk && !destOk) {
+            return "NO-GO — Both " + dep + " and " + dest + " are below VFR minimums.";
+        }
+        else if (!depOk) {
+            return "NO-GO — Departure " + dep + " is below VFR minimums.";
+        }
+        else if (!destOk) {
+            return "NO-GO — Destination " + dest + " is below VFR minimums.";
+        }
+        else if (depMarginal && destMarginal) {
+            return "CAUTION — Both airports reporting marginal VFR. Proceed carefully.";
+        }
+        else if (depMarginal) {
+            return "CAUTION — Departure " + dep + " is marginal VFR.";
+        }
+        else if (destMarginal) {
+            return "CAUTION — Destination " + dest + " is marginal VFR.";
+        }
+        else {
+            return "GO — Both " + dep + " and " + dest + " are VFR. Good to fly!";
+        }
     }
 
     //===== RUNWAY SECTION BUILDER =====
