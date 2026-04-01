@@ -1,6 +1,8 @@
-# Aviation Weather Tracker
+# CloudDeck
 
-Aviation Weather Tracker is a Java-based command-line tool designed to fetch and display METAR (Meteorological Aerodrome Report) data for specified airports. It also provides crosswind and headwind component calculations based on user-provided runway headings.
+CloudDeck is a Java-based aviation weather tool for pilots that pulls live METAR data from the FAA Aviation Weather API. Supports multiple airports, crosswind component calculations, and real-time flight category display.\
+
+![CloudDeck Screenshot]<img width="699" height="583" alt="screenshot_clouddeck" src="https://github.com/user-attachments/assets/8c49fc1a-9832-45cd-a519-ce1cd2024159" />
 
 ## Features
 - **METAR Fetcher**: Retrieves real-time weather data from the FAA Aviation Weather API in JSON format.
