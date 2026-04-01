@@ -26,6 +26,11 @@ public class Main {
                 break;
             }
 
+            if (input.isEmpty()) {
+                System.out.println("No input entered, please try again.");
+                continue;
+            }
+
             //output parsed & raw metar (if successful)
             try {
                 JSONArray results = fetcher.fetchRaw(input);
@@ -53,7 +58,18 @@ public class Main {
                     String runwayRepeat = "y";
                     while (runwayRepeat.equalsIgnoreCase("y")) {
                         System.out.print("Enter runway heading (1-36 or 0 to skip): ");
-                        int runway = Integer.parseInt(scanner.nextLine().trim());
+                        int runway = 0;
+                        try {
+                            runway = Integer.parseInt(scanner.nextLine().trim());
+                            if (runway < 0 || runway > 36) {
+                                System.out.println("Invalid runway — must be between 1 and 36.");
+                                break;
+                            }
+                        }
+                        catch (NumberFormatException e) {
+                            System.out.println("Invalid input — please enter a number between 1 and 36.");
+                            break;
+                        }
 
                         if (runway != 0) {
                             CrosswindCalculator.printComponents(runway * 10, metar.getWindDir(), metar.getWindSpeed());
