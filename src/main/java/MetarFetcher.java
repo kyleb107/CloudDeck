@@ -3,7 +3,6 @@
  */
 
 import org.json.JSONArray;
-import org.json.JSONObject;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -12,7 +11,7 @@ import java.net.http.HttpResponse;
 public class MetarFetcher {
     private static final String BASE_URL = "https://aviationweather.gov/api/data/metar?ids=%s&format=json";
 
-    public JSONObject fetchRaw(String icaoId) throws Exception {
+    public JSONArray fetchRaw(String icaoId) throws Exception {
         String url = String.format(BASE_URL, icaoId.toUpperCase());
 
         HttpClient client = HttpClient.newHttpClient();
@@ -27,6 +26,6 @@ public class MetarFetcher {
             throw new Exception("No METAR data found for station: " + icaoId);
         }
 
-        return jsonArray.getJSONObject(0);
+        return jsonArray;
     }
 }

@@ -2,6 +2,11 @@
    Prompts user for an ICAO airport ID & displays METAR data
  */
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import org.json.JSONArray;
+
+import java.util.List;
 import java.util.Scanner;
 
 public class Main {
@@ -23,16 +28,42 @@ public class Main {
 
             //output parsed & raw metar (if successful)
             try {
-                MetarData metar = parser.parse(fetcher.fetchRaw(input));
-                System.out.println("\n" + metar.toString());
-                System.out.println("Raw METAR: " + metar.getRawOb() + "\n");
+                JSONArray results = fetcher.fetchRaw(input);
+                List<MetarData> metarList = new ArrayList<>();
 
-                //CROSSWIND CALCULATION
-                System.out.print("Enter runway heading for crosswind calculation (1-36 or 0 to skip): ");
-                int runway = Integer.parseInt(scanner.nextLine().trim());
+                //build the list
+                for (int i = 0; i < results.length(); i++) {
+                    MetarData metar = parser.parse(results.getJSONObject(i));
+                    metarList.add(metar);
+                }
 
-                if (runway != 0) {
-                    CrosswindCalculator.printComponents(runway * 10, metar.getWindDir(), metar.getWindSpeed());
+                //sort to match user input order
+                List<String> inputOrder = Arrays.asList(input.toUpperCase().split(","));
+                metarList.sort((a, b) -> inputOrder.indexOf(a.getAirportId()) - inputOrder.indexOf(b.getAirportId()));
+
+                //display all METARs
+                for (MetarData metar : metarList) {
+                    System.out.println("\n" + metar.toString());
+                    System.out.println("Raw METAR: " + metar.getRawOb() + "\n");
+                }
+
+                //then crosswind calculations
+                for (MetarData metar : metarList) {
+                    System.out.println("\nCrosswind calculation for " + metar.getAirportId() + ":");
+                    String runwayRepeat = "y";
+                    while (runwayRepeat.equalsIgnoreCase("y")) {
+                        System.out.print("Enter runway heading (1-36 or 0 to skip): ");
+                        int runway = Integer.parseInt(scanner.nextLine().trim());
+
+                        if (runway != 0) {
+                            CrosswindCalculator.printComponents(runway * 10, metar.getWindDir(), metar.getWindSpeed());
+                            System.out.print("Another runway? (y/n): ");
+                            runwayRepeat = scanner.nextLine().trim();
+                        }
+                        else {
+                            break;
+                        }
+                    }
                 }
             }
             //error, invalid metar
@@ -42,6 +73,6 @@ public class Main {
         }
 
         scanner.close();
-        System.out.println("Goodbye.");
+        System.out.println("Goodbye. Thank you for using CloudDeck!");
     }
 }
