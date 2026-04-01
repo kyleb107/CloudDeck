@@ -2,13 +2,16 @@
 
 CloudDeck is a Java-based aviation weather tool for pilots that pulls live METAR data from the FAA Aviation Weather API. Supports multiple airports, crosswind component calculations, and real-time flight category display.
 
-<img width="749" height="652" alt="Screenshot 2026-04-01 003425" src="https://github.com/user-attachments/assets/6f6b154e-db90-44cc-9087-800faa3aabb8" />
+<img width="793" height="658" alt="Screenshot 2026-04-01 154504" src="https://github.com/user-attachments/assets/d60fc482-7f37-4d70-b760-ffdc59731484" />
+
+<img width="776" height="655" alt="Screenshot 2026-04-01 154439" src="https://github.com/user-attachments/assets/bdb91fad-e85a-45e6-ad34-97649782a6ca" />
 
 ## Features
 - **METAR Fetcher**: Retrieves real-time weather data from the FAA Aviation Weather API in JSON format.
 - **METAR Parser**: Extracts key information such as wind direction, speed, altimeter setting, and flight category.
 - **Crosswind Calculator**: Computes headwind/tailwind and crosswind components for specific runways.
 - **Support for Multiple Stations**: Accepts multiple ICAO station IDs separated by commas.
+- ***NEW*****Route Planner**: Plan a flight between two different airports based on Metar weather data.
 
 ## Requirements
 - **Java Development Kit (JDK)**: Version 24 or higher (as specified in `pom.xml`).
