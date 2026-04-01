@@ -31,6 +31,7 @@ public class MetarData {
     public String getObservationTime() { return observationTime; }
     public int getWindDir() { return windDir; }
     public int getWindSpeed() { return windSpeed; }
+    public int getWindGust() { return windGust; }
     public float getAltimeter() { return altimeter; }
     public String getFlightCategory() { return flightCategory; }
     public String getCloudLayers() { return cloudLayers; }

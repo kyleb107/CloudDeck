@@ -16,3 +16,12 @@
 .text-area .scroll-pane .viewport {
     -fx-background-color: #1e1e1e;
 }
+
+.scroll-bar {
+    -fx-background-color: #1a1a1a;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: #444444;
+    -fx-background-radius: 4px;
+}
