@@ -39,7 +39,7 @@ public class MainApp extends Application {
 
         //===== INPUT ROW =====
         TextField airportInput = new TextField();
-        airportInput.setPromptText("Enter ICAO ID(s) ex: KDFW,KAUS,KLFK");
+        airportInput.setPromptText("Enter ICAO ID(s) ex: KDFW,KHOU,KLFK");
         airportInput.setStyle(
                 "-fx-background-color: #2a2a2a; -fx-text-fill: white; " +
                         "-fx-prompt-text-fill: #666666; -fx-font-size: 14px; -fx-padding: 10px;"
@@ -188,8 +188,13 @@ public class MainApp extends Application {
                 metar.getWindDir(), metar.getWindSpeed());
 
         Label windLabel = makeInfoLabel(windStr);
+        //convert celsius to fahrenheit for display
+        float tempF = (metar.getTempC() * 9 / 5) + 32;
         Label altLabel = makeInfoLabel(String.format(
                 "Altimeter: %.2f inHg  |  Clouds: %s", metar.getAltimeter(), metar.getCloudLayers()
+        ));
+        Label weatherLabel = makeInfoLabel(String.format(
+                "Temp: %.1f°F (%.1f°C)  |  Visibility: %.1f SM", tempF, metar.getTempC(), metar.getVisibSM()
         ));
         Label timeLabel = makeInfoLabel("Observation: " + metar.getObservationTime().replace("T", " ").replace(".000Z", "Z"));
         Label rawLabel = makeInfoLabel("Raw: " + metar.getRawOb());
@@ -201,8 +206,7 @@ public class MainApp extends Application {
         VBox runwaySection = buildRunwaySection(metar, runways, categoryColor);
 
         //assemble card
-        card.getChildren().addAll(headerRow, windLabel, altLabel, timeLabel, rawLabel, runwaySection);
-        return card;
+        card.getChildren().addAll(headerRow, windLabel, altLabel, weatherLabel, timeLabel, rawLabel, runwaySection);        return card;
     }
 
     //===== RUNWAY SECTION BUILDER =====

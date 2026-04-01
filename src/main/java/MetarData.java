@@ -12,8 +12,10 @@ public class MetarData {
     private int windGust;
     private float altimeter;
     private String flightCategory; //VFR, IFR, etc.
+    private float tempC;
+    private float visibSM;
 
-    public MetarData(String airportId, String rawOb, String observationTime, int windDir, int windSpeed, int windGust, float altimeter, String flightCategory, String cloudLayers) {
+    public MetarData(String airportId, String rawOb, String observationTime, int windDir, int windSpeed, int windGust, float altimeter, String flightCategory, String cloudLayers, float tempC, float visibSM) {
         this.airportId = airportId;
         this.rawOb = rawOb;
         this.observationTime = observationTime;
@@ -23,6 +25,8 @@ public class MetarData {
         this.altimeter = altimeter;
         this.flightCategory = flightCategory;
         this.cloudLayers = cloudLayers;
+        this.tempC = tempC;
+        this.visibSM = visibSM;
     }
 
     //getters
@@ -35,6 +39,8 @@ public class MetarData {
     public float getAltimeter() { return altimeter; }
     public String getFlightCategory() { return flightCategory; }
     public String getCloudLayers() { return cloudLayers; }
+    public float getTempC() {return tempC;}
+    public float getVisibSM() {return visibSM;}
 
     @Override
     public String toString() {

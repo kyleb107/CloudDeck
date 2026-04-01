@@ -18,6 +18,18 @@ public class MetarParser {
 
         String flightCategory = json.optString("fltCat", "UNKNOWN");
 
+        //TEMP and VISIBILITY
+        float tempC = json.optFloat("temp", 0.0f);
+
+        //visibility comes back as a string ex: "10+" so parse it carefully
+        String visibStr = json.optString("visib", "0");
+        float visibSM = 0.0f;
+        try {
+            //strip any + sign ex: "10+" becomes "10"
+            visibSM = Float.parseFloat(visibStr.replace("+", "").trim());
+        }
+        catch (NumberFormatException ignored) {}
+
         //parse cloud layers
         String cloudLayers = "Clear";
         if (json.has("clouds")) {
@@ -37,6 +49,6 @@ public class MetarParser {
             }
         }
 
-        return new MetarData(stationId, rawOb, observationTime, windDir, windSpeed, windGust, altimeter, flightCategory, cloudLayers);
-    }
+        return new MetarData(stationId, rawOb, observationTime, windDir, windSpeed, windGust,
+                altimeter, flightCategory, cloudLayers, tempC, visibSM);    }
 }
