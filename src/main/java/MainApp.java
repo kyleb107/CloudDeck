@@ -25,6 +25,7 @@ public class MainApp extends Application {
     private final MetarFetcher fetcher = new MetarFetcher();
     private final MetarParser parser = new MetarParser();
     private final RunwayFetcher runwayFetcher = new RunwayFetcher();
+    private final VBox favoritesBar = new VBox(4);
 
     //===== START =====
     @Override
@@ -106,6 +107,7 @@ public class MainApp extends Application {
                     Platform.runLater(() -> {
                         cardsContainer.getChildren().addAll(cards);
                         statusLabel.setText("");
+                        refreshFavoritesBar(airportInput);
                     });
                 }
                 catch (Exception ex) {
@@ -118,7 +120,10 @@ public class MainApp extends Application {
         HBox inputRow = new HBox(10, airportInput, fetchButton);
         inputRow.setAlignment(Pos.CENTER);
 
-        VBox weatherPane = new VBox(10, title, subtitle, inputRow, statusLabel, scrollPane);
+        //load favorites on startup
+        refreshFavoritesBar(airportInput);
+
+        VBox weatherPane = new VBox(10, title, subtitle, inputRow, favoritesBar, statusLabel, scrollPane);
         weatherPane.setPadding(new Insets(20));
         weatherPane.setAlignment(Pos.TOP_CENTER);
         weatherPane.setStyle("-fx-background-color: #121212;");
@@ -143,6 +148,46 @@ public class MainApp extends Application {
         stage.setTitle("CloudDeck");
         stage.setScene(scene);
         stage.show();
+    }
+
+    //===== FAVORITES BAR =====
+    private void refreshFavoritesBar(TextField airportInput) {
+        favoritesBar.getChildren().clear();
+        List<String> favorites = FavoritesManager.loadFavorites();
+
+        if (favorites.isEmpty()) return;
+
+        Label favTitle = new Label("Favorites:");
+        favTitle.setStyle("-fx-text-fill: #888888; -fx-font-size: 11px;");
+
+        HBox chips = new HBox(6);
+        chips.setAlignment(Pos.CENTER_LEFT);
+
+        for (String icao : favorites) {
+            Button chip = new Button(icao);
+            chip.setStyle(
+                    "-fx-background-color: #2a2a2a; -fx-text-fill: #4ea8de; " +
+                            "-fx-font-size: 12px; -fx-padding: 3px 10px; " +
+                            "-fx-background-radius: 12; -fx-cursor: hand;"
+            );
+            chip.setOnAction(e -> airportInput.setText(icao));
+
+            Button remove = new Button("✕");
+            remove.setStyle(
+                    "-fx-background-color: transparent; -fx-text-fill: #666666; " +
+                            "-fx-font-size: 11px; -fx-padding: 3px 6px; -fx-cursor: hand;"
+            );
+            remove.setOnAction(e -> {
+                FavoritesManager.removeFavorite(icao);
+                refreshFavoritesBar(airportInput);
+            });
+
+            HBox chipRow = new HBox(2, chip, remove);
+            chipRow.setAlignment(Pos.CENTER_LEFT);
+            chips.getChildren().add(chipRow);
+        }
+
+        favoritesBar.getChildren().addAll(favTitle, chips);
     }
 
     //===== AIRPORT CARD BUILDER =====
@@ -184,6 +229,28 @@ public class MainApp extends Application {
 
         HBox headerRow = new HBox(8, dot, airportLabel, categoryLabel);
         headerRow.setAlignment(Pos.CENTER_LEFT);
+
+        //favorite toggle button
+        boolean isFav = FavoritesManager.isFavorite(metar.getAirportId());
+        Button favBtn = new Button(isFav ? "★ Saved" : "☆ Save");
+        favBtn.setStyle(
+                "-fx-background-color: transparent; -fx-text-fill: #ffaa00; " +
+                        "-fx-font-size: 12px; -fx-padding: 3px 8px; -fx-cursor: hand;"
+        );
+        favBtn.setOnAction(e -> {
+            if (FavoritesManager.isFavorite(metar.getAirportId())) {
+                FavoritesManager.removeFavorite(metar.getAirportId());
+                favBtn.setText("☆ Save");
+            }
+            else {
+                FavoritesManager.addFavorite(metar.getAirportId());
+                favBtn.setText("★ Saved");
+            }
+        });
+
+        HBox headerWithFav = new HBox(8, headerRow, favBtn);
+        headerWithFav.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(headerRow, Priority.ALWAYS);
 
         //airport full name shown below the ICAO ID (if available)
         Label nameLabel = makeInfoLabel(metar.getAirportName());
@@ -237,7 +304,7 @@ public class MainApp extends Application {
 
         //assemble card
         card.getChildren().addAll(
-                headerRow, nameLabel, windLabel, altLabel, weatherLabel,
+                headerWithFav, nameLabel, windLabel, altLabel, weatherLabel,
                 vfrLabel, timeLabel, rawLabel, runwaySection
         );
         return card;
