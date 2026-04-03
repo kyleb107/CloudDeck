@@ -129,7 +129,7 @@ public class MainApp extends Application {
         weatherPane.setStyle("-fx-background-color: #121212;");
 
         //route planner pane
-        ScrollPane routeScroll = new ScrollPane(buildRoutePlanner());
+        ScrollPane routeScroll = new ScrollPane(buildRoutePlanner(stage));
         routeScroll.setFitToWidth(true);
         routeScroll.setStyle("-fx-background-color: #121212; -fx-background: #121212;");
 
@@ -147,14 +147,17 @@ public class MainApp extends Application {
         Scene scene = new Scene(tabPane, 800, 660);        scene.getStylesheets().add(getClass().getResource("/style.css").toExternalForm());
         stage.setTitle("CloudDeck");
         stage.setScene(scene);
+        attachAutocomplete(airportInput, stage);
         stage.show();
     }
 
     //===== FAVORITES BAR =====
     private void refreshFavoritesBar(TextField airportInput) {
         favoritesBar.getChildren().clear();
-        List<String> favorites = FavoritesManager.loadFavorites();
-
+        //only show plain airports, not routes
+        List<String> favorites = FavoritesManager.loadFavorites().stream()
+                .filter(f -> !f.contains("→"))
+                .collect(java.util.stream.Collectors.toList());
         if (favorites.isEmpty()) return;
 
         Label favTitle = new Label("Favorites:");
@@ -312,7 +315,7 @@ public class MainApp extends Application {
 
     //===== ROUTE PLANNER =====
 //builds a route planner section with departure and destination inputs
-    public VBox buildRoutePlanner() {
+    public VBox buildRoutePlanner(Stage stage) {
         VBox routePane = new VBox(12);
         routePane.setPadding(new Insets(10));
 
@@ -342,6 +345,9 @@ public class MainApp extends Application {
                 "-fx-background-color: #2a2a2a; -fx-text-fill: white; " +
                         "-fx-prompt-text-fill: #666666; -fx-font-size: 13px; -fx-padding: 8px;"
         );
+
+        attachAutocomplete(depInput, stage);
+        attachAutocomplete(destInput, stage);
 
         Button planButton = new Button("Check Route");
         planButton.setStyle(
@@ -611,6 +617,70 @@ public class MainApp extends Application {
         String side = crosswind >= 0 ? "from right" : "from left";
         return String.format("%s: %.1f kts  |  Crosswind: %.1f kts %s",
                 hwLabel, Math.abs(headwind), Math.abs(crosswind), side);
+    }
+
+    //attaches a suggestion popup to a text field
+    private void attachAutocomplete(TextField input, Stage stage) {
+        ListView<String> suggestionList = new ListView<>();
+        suggestionList.setStyle(
+                "-fx-background-color: #2a2a2a; -fx-border-color: #444444; " +
+                        "-fx-border-width: 1px;"
+        );
+        suggestionList.setPrefHeight(120);
+        suggestionList.setMaxWidth(400);
+
+        javafx.stage.Popup popup = new javafx.stage.Popup();
+        popup.getContent().add(suggestionList);
+        popup.setAutoHide(true);
+
+        input.textProperty().addListener((obs, oldVal, newVal) -> {
+            //get the last airport ID being typed (after last comma)
+            String[] parts = newVal.split(",");
+            String currentQuery = parts[parts.length - 1].trim();
+
+            if (currentQuery.length() < 2) {
+                popup.hide();
+                return;
+            }
+
+            //fetch suggestions on background thread
+            new Thread(() -> {
+                List<String[]> suggestions = AirportSuggester.suggest(currentQuery, 6);
+
+                Platform.runLater(() -> {
+                    if (suggestions.isEmpty()) {
+                        popup.hide();
+                        return;
+                    }
+
+                    suggestionList.getItems().clear();
+                    for (String[] airport : suggestions) {
+                        suggestionList.getItems().add(
+                                airport[0] + "  —  " + airport[1] + ", " + airport[2]
+                        );
+                    }
+
+                    //position popup below the input field
+                    javafx.geometry.Bounds bounds = input.localToScreen(input.getBoundsInLocal());
+                    if (bounds != null) {
+                        popup.show(stage, bounds.getMinX(), bounds.getMaxY() + 2);
+                    }
+                });
+            }).start();
+        });
+
+        //when user clicks a suggestion, fill in the input
+        suggestionList.setOnMouseClicked(e -> {
+            String selected = suggestionList.getSelectionModel().getSelectedItem();
+            if (selected == null) return;
+
+            String icao = selected.split("  —  ")[0].trim();
+            String[] parts = input.getText().split(",");
+            parts[parts.length - 1] = icao;
+            input.setText(String.join(",", parts));
+            input.positionCaret(input.getText().length());
+            popup.hide();
+        });
     }
 
     //===== ENTRY POINT =====
