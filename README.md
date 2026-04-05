@@ -18,6 +18,7 @@ CloudDeck is a JavaFX desktop app for pilots that combines live FAA METAR data w
 - Alternate-airport suggestions when route conditions are poor
 - Sunrise and sunset planning in airport briefings and route summaries
 - Operational alerts panel for fuel, weather, runway, and night-planning risks
+- Exportable route briefings saved as text files
 - Airport autocomplete backed by cached airport data
 - Persistent favorites stored in a local CloudDeck app directory
 
@@ -30,6 +31,11 @@ CloudDeck is a JavaFX desktop app for pilots that combines live FAA METAR data w
 ## Run
 ```bash
 mvn clean javafx:run
+```
+
+## Test
+```bash
+mvn test
 ```
 
 If you run from IntelliJ, use `com.kylebarnes.clouddeck.CloudDeckLauncher` as the main class.
@@ -50,10 +56,11 @@ src/main/java/com/kylebarnes/clouddeck/
 - Favorites are stored in `~/.clouddeck/favorites.txt`
 - Aircraft profiles are stored in `~/.clouddeck/aircraft_profiles.tsv`
 - App settings are stored in `~/.clouddeck/settings.properties`
+- Exported briefings are stored in `~/.clouddeck/briefings/`
 - A legacy `~/clouddeck_favorites.txt` file is still read automatically for migration
 - The desktop UI is now separated from the core services so the domain layer can be reused by a future web or mobile client
 
 ## Next Technical Priorities
-- Add automated tests for service and parser classes
 - Add local-time display and broader unit preferences
-- Add exportable weather briefings or trip summaries
+- Add printable or PDF briefing output alongside text export
+- Add API endpoints around the existing service layer for a future web client
