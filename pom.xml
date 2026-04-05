@@ -14,6 +14,7 @@
         <javafx.version>21</javafx.version>
         <json.version>20231013</json.version>
         <junit.version>5.10.2</junit.version>
+        <pdfbox.version>3.0.7</pdfbox.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -27,6 +28,11 @@
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
             <version>${javafx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

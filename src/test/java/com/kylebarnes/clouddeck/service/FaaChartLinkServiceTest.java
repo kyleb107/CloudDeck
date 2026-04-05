@@ -14,7 +14,7 @@ class FaaChartLinkServiceTest {
     void currentAiracCycleAdvancesFromKnownBaseline() {
         assertEquals("2413", service.currentAiracCycle(LocalDate.of(2024, 12, 26)));
         assertEquals("2501", service.currentAiracCycle(LocalDate.of(2025, 1, 23)));
-        assertEquals("2604", service.currentAiracCycle(LocalDate.of(2026, 4, 5)));
+        assertEquals("2603", service.currentAiracCycle(LocalDate.of(2026, 4, 5)));
     }
 
     @Test

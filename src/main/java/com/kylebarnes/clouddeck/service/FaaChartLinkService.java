@@ -25,6 +25,14 @@ public class FaaChartLinkService {
                 + "&navaid=";
     }
 
+    public String buildDtppXmlUrl() {
+        return "https://aeronav.faa.gov/d-tpp/" + currentAiracCycle() + "/xml_data/d-tpp_Metafile.xml";
+    }
+
+    public String buildPdfUrl(String pdfName) {
+        return "https://aeronav.faa.gov/d-tpp/" + currentAiracCycle() + "/" + pdfName;
+    }
+
     public String airportSearchHint(String airportId) {
         String normalized = normalizeAirportId(airportId);
         String faaSearchId = faaSearchId(airportId);

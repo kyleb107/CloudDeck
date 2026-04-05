@@ -6,6 +6,7 @@ import com.kylebarnes.clouddeck.data.OurAirportsRepository;
 import com.kylebarnes.clouddeck.data.TafClient;
 import com.kylebarnes.clouddeck.data.TafParser;
 import com.kylebarnes.clouddeck.model.AircraftProfile;
+import com.kylebarnes.clouddeck.model.AirportDiagramPreview;
 import com.kylebarnes.clouddeck.model.AlternateAirportOption;
 import com.kylebarnes.clouddeck.model.AppSettings;
 import com.kylebarnes.clouddeck.model.AirportInfo;
@@ -14,6 +15,7 @@ import com.kylebarnes.clouddeck.model.AirportWeather;
 import com.kylebarnes.clouddeck.model.CrosswindComponents;
 import com.kylebarnes.clouddeck.model.DistanceUnit;
 import com.kylebarnes.clouddeck.model.MetarData;
+import com.kylebarnes.clouddeck.model.RecentRouteEntry;
 import com.kylebarnes.clouddeck.model.RoutePlan;
 import com.kylebarnes.clouddeck.model.Runway;
 import com.kylebarnes.clouddeck.model.SolarTimes;
@@ -26,6 +28,7 @@ import com.kylebarnes.clouddeck.service.CrosswindCalculator;
 import com.kylebarnes.clouddeck.service.DensityAltitudeAssessment;
 import com.kylebarnes.clouddeck.service.DensityAltitudeService;
 import com.kylebarnes.clouddeck.service.AlternateAirportService;
+import com.kylebarnes.clouddeck.service.AirportDiagramService;
 import com.kylebarnes.clouddeck.service.BriefingExportService;
 import com.kylebarnes.clouddeck.service.FaaChartLinkService;
 import com.kylebarnes.clouddeck.service.FlightConditionEvaluator;
@@ -44,7 +47,9 @@ import com.kylebarnes.clouddeck.storage.AircraftProfileRepository;
 import com.kylebarnes.clouddeck.storage.FavoritesRepository;
 import com.kylebarnes.clouddeck.storage.LocalAircraftProfileRepository;
 import com.kylebarnes.clouddeck.storage.LocalFavoritesRepository;
+import com.kylebarnes.clouddeck.storage.LocalRouteHistoryRepository;
 import com.kylebarnes.clouddeck.storage.LocalSettingsRepository;
+import com.kylebarnes.clouddeck.storage.RouteHistoryRepository;
 import com.kylebarnes.clouddeck.storage.SettingsRepository;
 import javafx.application.Application;
 import javafx.application.Platform;
@@ -69,6 +74,8 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -89,6 +96,8 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.nio.file.Path;
 import java.util.stream.Collectors;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
 
 public class MainApp extends Application {
     private static final String CARD_SHADOW = "dropshadow(gaussian, rgba(0,0,0,0.18), 18, 0.2, 0, 6)";
@@ -106,6 +115,7 @@ public class MainApp extends Application {
     private final FlightPlanningService flightPlanningService = new FlightPlanningService();
     private final BriefingExportService briefingExportService = new BriefingExportService();
     private final FaaChartLinkService faaChartLinkService = new FaaChartLinkService();
+    private final AirportDiagramService airportDiagramService = new AirportDiagramService();
     private final OperationalAlertService operationalAlertService = new OperationalAlertService();
     private final DensityAltitudeService densityAltitudeService = new DensityAltitudeService();
     private final AlternateAirportService alternateAirportService = new AlternateAirportService(
@@ -118,6 +128,7 @@ public class MainApp extends Application {
     private final FavoritesRepository favoritesRepository = new LocalFavoritesRepository();
     private final AircraftProfileRepository aircraftProfileRepository = new LocalAircraftProfileRepository();
     private final SettingsRepository settingsRepository = new LocalSettingsRepository();
+    private final RouteHistoryRepository routeHistoryRepository = new LocalRouteHistoryRepository();
     private final ExecutorService backgroundExecutor = Executors.newCachedThreadPool(runnable -> {
         Thread thread = new Thread(runnable);
         thread.setDaemon(true);
@@ -128,12 +139,14 @@ public class MainApp extends Application {
     private final VBox favoritesBar = new VBox(6);
     private final VBox weatherCardsContainer = new VBox(14);
     private final VBox routeResultsBox = new VBox(12);
+    private final VBox recentRoutesBox = new VBox(8);
     private final VBox aircraftSummaryBox = new VBox(8);
     private final ComboBox<AircraftProfile> aircraftSelector = new ComboBox<>();
     private final Label aircraftHeroSummary = new Label();
     private final Label aircraftHeroNote = new Label();
     private static final DateTimeFormatter ROUTE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final DateTimeFormatter CLOCK_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+    private final Map<String, Image> airportDiagramImageCache = new ConcurrentHashMap<>();
 
     private ThemePalette themePalette;
     private AppSettings appSettings;
@@ -370,6 +383,7 @@ public class MainApp extends Application {
         Button planButton = createPrimaryButton("Analyze Route");
         Button exportButton = createSecondaryButton("Export Briefing");
         routeStatusLabel = createMutedLabel("");
+        refreshRecentRoutes();
 
         planButton.setOnAction(event -> {
             String departure = routeDepartureInput.getText().trim().toUpperCase();
@@ -395,7 +409,9 @@ public class MainApp extends Application {
                     () -> weatherService.fetchAirportWeather(departure + "," + destination),
                     weather -> {
                         latestRouteResults = weather;
+                        routeHistoryRepository.saveRecentRoute(departure, destination, getPlannedDepartureTimeUtc());
                         invalidateAlternateSuggestions();
+                        refreshRecentRoutes();
                         routeStatusLabel.setText("");
                         rerenderRouteResults();
                     },
@@ -466,8 +482,13 @@ public class MainApp extends Application {
                 "CloudDeck assumes a direct course and applies taxi, climb, and groundspeed settings from the Settings tab.",
                 new HBox(12, routeDepartureInput, routeDestinationInput, routeDepartureTimeInput, planButton, exportButton)
         );
+        VBox recentRoutesCard = createPanel(
+                "Recent Routes",
+                "Reuse recent route checks without retyping airport pairs.",
+                recentRoutesBox
+        );
 
-        VBox content = new VBox(16, sectionTitle, sectionSubtitle, plannerCard, routeStatusLabel, routeResultsBox);
+        VBox content = new VBox(16, sectionTitle, sectionSubtitle, plannerCard, recentRoutesCard, routeStatusLabel, routeResultsBox);
         content.setPadding(new Insets(24));
 
         ScrollPane scrollPane = new ScrollPane(content);
@@ -860,6 +881,8 @@ public class MainApp extends Application {
         VBox chartBox = new VBox(6);
         chartBox.getChildren().add(createSubsectionTitle("Chart Resources"));
 
+        chartBox.getChildren().add(buildAirportDiagramPreviewBox(airportId));
+
         Button diagramButton = createSecondaryButton("Airport Diagram");
         diagramButton.setOnAction(event -> openExternalUrl(faaChartLinkService.buildAirportDiagramUrl(airportId)));
 
@@ -872,6 +895,56 @@ public class MainApp extends Application {
         );
         chartBox.getChildren().addAll(actions, hint);
         return chartBox;
+    }
+
+    private VBox buildAirportDiagramPreviewBox(String airportId) {
+        VBox previewBox = new VBox(6);
+
+        Label previewTitle = createMutedLabel("Airport diagram preview");
+        ImageView imageView = new ImageView();
+        imageView.setPreserveRatio(true);
+        imageView.setFitWidth(250);
+        imageView.setSmooth(true);
+
+        Label statusLabel = createMutedLabel("Loading FAA airport diagram preview...");
+
+        VBox imageFrame = new VBox(8, imageView, statusLabel);
+        imageFrame.setPadding(new Insets(10));
+        imageFrame.setStyle(
+                "-fx-background-color: " + themePalette.metricBackground() + "; -fx-border-color: " + themePalette.metricBorder() + "; " +
+                        "-fx-background-radius: 14; -fx-border-radius: 14;"
+        );
+
+        Image cachedImage = airportDiagramImageCache.get(airportId);
+        if (cachedImage != null) {
+            imageView.setImage(cachedImage);
+            statusLabel.setText("Click the image to open the full FAA PDF.");
+            imageView.setOnMouseClicked(event -> openAirportDiagramPdf(airportId));
+        } else {
+            runAsync(
+                    () -> airportDiagramService.loadPreview(airportId),
+                    preview -> {
+                        if (preview == null) {
+                            statusLabel.setText("FAA airport diagram preview unavailable for this airport.");
+                            return;
+                        }
+
+                        try {
+                            Image image = new Image(preview.imagePath().toUri().toString(), true);
+                            airportDiagramImageCache.put(airportId, image);
+                            imageView.setImage(image);
+                            imageView.setOnMouseClicked(event -> openExternalUrl(preview.pdfUrl()));
+                            statusLabel.setText("Click the image to open the full FAA PDF.");
+                        } catch (Exception exception) {
+                            statusLabel.setText("Diagram loaded, but the preview image could not be displayed.");
+                        }
+                    },
+                    throwable -> statusLabel.setText("Could not load FAA diagram preview: " + throwable.getMessage())
+            );
+        }
+
+        previewBox.getChildren().addAll(previewTitle, imageFrame);
+        return previewBox;
     }
 
     private VBox buildTafSection(TafData taf) {
@@ -1333,6 +1406,51 @@ public class MainApp extends Application {
         );
     }
 
+    private void refreshRecentRoutes() {
+        recentRoutesBox.getChildren().clear();
+        List<RecentRouteEntry> recentRoutes = routeHistoryRepository.loadRecentRoutes();
+        if (recentRoutes.isEmpty()) {
+            recentRoutesBox.getChildren().add(createMutedLabel("No recent routes yet. Analyze a route to save it here."));
+            return;
+        }
+
+        for (RecentRouteEntry entry : recentRoutes) {
+            Label routeLabel = new Label(entry.departureAirport() + " -> " + entry.destinationAirport());
+            routeLabel.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 13px; -fx-font-weight: bold;");
+
+            String timestamp = "Planned " + entry.plannedDepartureUtc().format(ROUTE_TIME_FORMATTER)
+                    + " UTC  |  Last used " + entry.lastUsedUtc().format(ROUTE_TIME_FORMATTER) + " UTC";
+            Label metaLabel = createMutedLabel(timestamp);
+
+            Button useButton = createSecondaryButton("Use Route");
+            useButton.setOnAction(event -> {
+                latestRouteDeparture = entry.departureAirport();
+                latestRouteDestination = entry.destinationAirport();
+                if (routeDepartureInput != null) {
+                    routeDepartureInput.setText(entry.departureAirport());
+                }
+                if (routeDestinationInput != null) {
+                    routeDestinationInput.setText(entry.destinationAirport());
+                }
+                if (routeDepartureTimeInput != null) {
+                    routeDepartureTimeInput.setText(entry.plannedDepartureUtc().format(ROUTE_TIME_FORMATTER));
+                }
+                routeStatusLabel.setText("Recent route loaded. Click Analyze Route to refresh weather and forecasts.");
+            });
+
+            HBox header = new HBox(12, routeLabel, new Region(), useButton);
+            HBox.setHgrow(header.getChildren().get(1), Priority.ALWAYS);
+
+            VBox routeCard = new VBox(4, header, metaLabel);
+            routeCard.setPadding(new Insets(12));
+            routeCard.setStyle(
+                    "-fx-background-color: " + themePalette.metricBackground() + "; -fx-border-color: " + themePalette.metricBorder() + "; " +
+                            "-fx-background-radius: 14; -fx-border-radius: 14;"
+            );
+            recentRoutesBox.getChildren().add(routeCard);
+        }
+    }
+
     private void refreshFavoritesBar(TextField airportInput) {
         favoritesBar.getChildren().clear();
         List<String> favorites = favoritesRepository.loadFavorites().stream()
@@ -1450,6 +1568,22 @@ public class MainApp extends Application {
                 routeStatusLabel.setText("Could not open browser: " + exception.getMessage());
             }
         }
+    }
+
+    private void openAirportDiagramPdf(String airportId) {
+        runAsync(
+                () -> airportDiagramService.loadPreview(airportId),
+                preview -> {
+                    if (preview != null) {
+                        openExternalUrl(preview.pdfUrl());
+                    }
+                },
+                throwable -> {
+                    if (routeStatusLabel != null) {
+                        routeStatusLabel.setText("Could not open airport diagram PDF: " + throwable.getMessage());
+                    }
+                }
+        );
     }
 
     private void updateAircraftDisplays() {
