@@ -3,6 +3,7 @@ package com.kylebarnes.clouddeck.storage;
 import com.kylebarnes.clouddeck.model.AppSettings;
 import com.kylebarnes.clouddeck.model.DistanceUnit;
 import com.kylebarnes.clouddeck.model.TemperatureUnit;
+import com.kylebarnes.clouddeck.model.ThemePreset;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -32,8 +33,12 @@ public class LocalSettingsRepository implements SettingsRepository {
             return new AppSettings(
                     properties.getProperty("homeAirport", defaults.homeAirport()).trim().toUpperCase(),
                     properties.getProperty("defaultAircraftName", defaults.defaultAircraftName()).trim(),
+                    parseThemePreset(properties.getProperty("themePreset"), defaults.themePreset()),
                     parseTemperatureUnit(properties.getProperty("temperatureUnit"), defaults.temperatureUnit()),
                     parseDistanceUnit(properties.getProperty("distanceUnit"), defaults.distanceUnit()),
+                    parseDouble(properties.getProperty("taxiFuelGallons"), defaults.taxiFuelGallons()),
+                    parseDouble(properties.getProperty("climbFuelGallons"), defaults.climbFuelGallons()),
+                    parseInt(properties.getProperty("groundspeedAdjustmentKts"), defaults.groundspeedAdjustmentKts()),
                     parseFloat(properties.getProperty("vfrWarningVisibilitySm"), defaults.vfrWarningVisibilitySm()),
                     parseInt(properties.getProperty("vfrWarningCeilingFt"), defaults.vfrWarningCeilingFt()),
                     parseFloat(properties.getProperty("vfrCautionVisibilitySm"), defaults.vfrCautionVisibilitySm()),
@@ -52,8 +57,12 @@ public class LocalSettingsRepository implements SettingsRepository {
         Properties properties = new Properties();
         properties.setProperty("homeAirport", settings.homeAirport());
         properties.setProperty("defaultAircraftName", settings.defaultAircraftName());
+        properties.setProperty("themePreset", settings.themePreset().name());
         properties.setProperty("temperatureUnit", settings.temperatureUnit().name());
         properties.setProperty("distanceUnit", settings.distanceUnit().name());
+        properties.setProperty("taxiFuelGallons", String.valueOf(settings.taxiFuelGallons()));
+        properties.setProperty("climbFuelGallons", String.valueOf(settings.climbFuelGallons()));
+        properties.setProperty("groundspeedAdjustmentKts", String.valueOf(settings.groundspeedAdjustmentKts()));
         properties.setProperty("vfrWarningVisibilitySm", String.valueOf(settings.vfrWarningVisibilitySm()));
         properties.setProperty("vfrWarningCeilingFt", String.valueOf(settings.vfrWarningCeilingFt()));
         properties.setProperty("vfrCautionVisibilitySm", String.valueOf(settings.vfrCautionVisibilitySm()));
@@ -79,6 +88,14 @@ public class LocalSettingsRepository implements SettingsRepository {
         }
     }
 
+    private ThemePreset parseThemePreset(String rawValue, ThemePreset fallback) {
+        try {
+            return rawValue == null ? fallback : ThemePreset.valueOf(rawValue.trim().toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            return fallback;
+        }
+    }
+
     private DistanceUnit parseDistanceUnit(String rawValue, DistanceUnit fallback) {
         try {
             return rawValue == null ? fallback : DistanceUnit.valueOf(rawValue.trim().toUpperCase());
@@ -98,6 +115,14 @@ public class LocalSettingsRepository implements SettingsRepository {
     private float parseFloat(String rawValue, float fallback) {
         try {
             return rawValue == null ? fallback : Float.parseFloat(rawValue.trim());
+        } catch (NumberFormatException exception) {
+            return fallback;
+        }
+    }
+
+    private double parseDouble(String rawValue, double fallback) {
+        try {
+            return rawValue == null ? fallback : Double.parseDouble(rawValue.trim());
         } catch (NumberFormatException exception) {
             return fallback;
         }

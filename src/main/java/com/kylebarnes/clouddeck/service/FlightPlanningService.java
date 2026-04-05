@@ -1,14 +1,20 @@
 package com.kylebarnes.clouddeck.service;
 
 import com.kylebarnes.clouddeck.model.AircraftProfile;
+import com.kylebarnes.clouddeck.model.AppSettings;
 import com.kylebarnes.clouddeck.model.AirportInfo;
 import com.kylebarnes.clouddeck.model.RoutePlan;
 
 public class FlightPlanningService {
     private static final double EARTH_RADIUS_NM = 3440.065;
 
-    public RoutePlan planDirectRoute(AirportInfo departure, AirportInfo destination, AircraftProfile aircraftProfile) {
-        if (departure == null || destination == null || aircraftProfile == null) {
+    public RoutePlan planDirectRoute(
+            AirportInfo departure,
+            AirportInfo destination,
+            AircraftProfile aircraftProfile,
+            AppSettings appSettings
+    ) {
+        if (departure == null || destination == null || aircraftProfile == null || appSettings == null) {
             return null;
         }
         if ((departure.latitudeDeg() == 0 && departure.longitudeDeg() == 0)
@@ -22,8 +28,10 @@ public class FlightPlanningService {
                 destination.latitudeDeg(),
                 destination.longitudeDeg()
         );
-        double estimatedTimeHours = distanceNm / aircraftProfile.cruiseSpeedKts();
-        double tripFuelGallons = estimatedTimeHours * aircraftProfile.fuelBurnGph();
+        double groundspeedKts = Math.max(40.0, aircraftProfile.cruiseSpeedKts() + appSettings.groundspeedAdjustmentKts());
+        double estimatedTimeHours = distanceNm / groundspeedKts;
+        double airborneFuelGallons = estimatedTimeHours * aircraftProfile.fuelBurnGph();
+        double tripFuelGallons = airborneFuelGallons + appSettings.taxiFuelGallons() + appSettings.climbFuelGallons();
         double reserveRemainingGallons = aircraftProfile.usableFuelGallons() - tripFuelGallons;
         boolean reserveSatisfied = reserveRemainingGallons >= aircraftProfile.reserveFuelGallons();
 
@@ -31,7 +39,11 @@ public class FlightPlanningService {
                 departure,
                 destination,
                 distanceNm,
+                groundspeedKts,
                 estimatedTimeHours,
+                airborneFuelGallons,
+                appSettings.taxiFuelGallons(),
+                appSettings.climbFuelGallons(),
                 tripFuelGallons,
                 reserveRemainingGallons,
                 reserveSatisfied
