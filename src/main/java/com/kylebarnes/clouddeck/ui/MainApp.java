@@ -344,12 +344,7 @@ public class MainApp extends Application {
         );
         refreshFavoritesBar(weatherAirportInput);
 
-        ScrollPane resultsScroll = new ScrollPane(weatherCardsContainer);
-        resultsScroll.setFitToWidth(true);
-        resultsScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
-        resultsScroll.setPrefHeight(560);
-
-        VBox content = new VBox(16, sectionTitle, sectionSubtitle, controlsCard, favoritesCard, statusLabel, resultsScroll);
+        VBox content = new VBox(16, sectionTitle, sectionSubtitle, controlsCard, favoritesCard, statusLabel, weatherCardsContainer);
         content.setPadding(new Insets(24));
         content.setStyle("-fx-background-color: transparent;");
 
@@ -386,37 +381,7 @@ public class MainApp extends Application {
         refreshRecentRoutes();
 
         planButton.setOnAction(event -> {
-            String departure = routeDepartureInput.getText().trim().toUpperCase();
-            String destination = routeDestinationInput.getText().trim().toUpperCase();
-
-            if (departure.isEmpty() || destination.isEmpty()) {
-                routeStatusLabel.setText("Please enter both a departure and destination.");
-                return;
-            }
-            try {
-                LocalDateTime.parse(routeDepartureTimeInput.getText().trim(), ROUTE_TIME_FORMATTER);
-            } catch (DateTimeParseException exception) {
-                routeStatusLabel.setText("Use UTC departure time format yyyy-MM-dd HH:mm.");
-                return;
-            }
-
-            latestRouteDeparture = departure;
-            latestRouteDestination = destination;
-            routeResultsBox.getChildren().setAll(routeStatusLabel);
-            routeStatusLabel.setText("Fetching route weather and forecast data...");
-
-            runAsync(
-                    () -> weatherService.fetchAirportWeather(departure + "," + destination),
-                    weather -> {
-                        latestRouteResults = weather;
-                        routeHistoryRepository.saveRecentRoute(departure, destination, getPlannedDepartureTimeUtc());
-                        invalidateAlternateSuggestions();
-                        refreshRecentRoutes();
-                        routeStatusLabel.setText("");
-                        rerenderRouteResults();
-                    },
-                    throwable -> routeStatusLabel.setText("Error: " + throwable.getMessage())
-            );
+            analyzeRouteFromInputs();
         });
 
         exportButton.setOnAction(event -> {
@@ -484,7 +449,7 @@ public class MainApp extends Application {
         );
         VBox recentRoutesCard = createPanel(
                 "Recent Routes",
-                "Reuse recent route checks without retyping airport pairs.",
+                "Reuse recent route checks with their saved UTC departure time.",
                 recentRoutesBox
         );
 
@@ -1568,11 +1533,11 @@ public class MainApp extends Application {
             Label routeLabel = new Label(entry.departureAirport() + " -> " + entry.destinationAirport());
             routeLabel.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 13px; -fx-font-weight: bold;");
 
-            String timestamp = "Planned " + entry.plannedDepartureUtc().format(ROUTE_TIME_FORMATTER)
+            String timestamp = "Saved departure " + entry.plannedDepartureUtc().format(ROUTE_TIME_FORMATTER)
                     + " UTC  |  Last used " + entry.lastUsedUtc().format(ROUTE_TIME_FORMATTER) + " UTC";
             Label metaLabel = createMutedLabel(timestamp);
 
-            Button useButton = createSecondaryButton("Use Route");
+            Button useButton = createSecondaryButton("Run Saved Route");
             useButton.setOnAction(event -> {
                 latestRouteDeparture = entry.departureAirport();
                 latestRouteDestination = entry.destinationAirport();
@@ -1585,7 +1550,7 @@ public class MainApp extends Application {
                 if (routeDepartureTimeInput != null) {
                     routeDepartureTimeInput.setText(entry.plannedDepartureUtc().format(ROUTE_TIME_FORMATTER));
                 }
-                routeStatusLabel.setText("Recent route loaded. Click Analyze Route to refresh weather and forecasts.");
+                analyzeRoute(entry.departureAirport(), entry.destinationAirport(), entry.plannedDepartureUtc());
             });
 
             HBox header = new HBox(12, routeLabel, new Region(), useButton);
@@ -1621,6 +1586,61 @@ public class MainApp extends Application {
 
         fields.getChildren().addAll(firstRow, plannerHint, actionRow);
         return fields;
+    }
+
+    private void analyzeRouteFromInputs() {
+        String departure = routeDepartureInput.getText().trim().toUpperCase();
+        String destination = routeDestinationInput.getText().trim().toUpperCase();
+
+        if (departure.isEmpty() || destination.isEmpty()) {
+            routeStatusLabel.setText("Please enter both a departure and destination.");
+            return;
+        }
+
+        LocalDateTime plannedDepartureUtc;
+        try {
+            plannedDepartureUtc = LocalDateTime.parse(routeDepartureTimeInput.getText().trim(), ROUTE_TIME_FORMATTER);
+        } catch (DateTimeParseException exception) {
+            routeStatusLabel.setText("Use UTC departure time format yyyy-MM-dd HH:mm.");
+            return;
+        }
+
+        analyzeRoute(departure, destination, plannedDepartureUtc);
+    }
+
+    private void analyzeRoute(String departure, String destination, LocalDateTime plannedDepartureUtc) {
+        if (plannedDepartureUtc == null) {
+            routeStatusLabel.setText("Use UTC departure time format yyyy-MM-dd HH:mm.");
+            return;
+        }
+
+        latestRouteDeparture = departure;
+        latestRouteDestination = destination;
+        if (routeDepartureInput != null) {
+            routeDepartureInput.setText(departure);
+        }
+        if (routeDestinationInput != null) {
+            routeDestinationInput.setText(destination);
+        }
+        if (routeDepartureTimeInput != null) {
+            routeDepartureTimeInput.setText(plannedDepartureUtc.format(ROUTE_TIME_FORMATTER));
+        }
+
+        routeResultsBox.getChildren().setAll(routeStatusLabel);
+        routeStatusLabel.setText("Fetching route weather and forecast data...");
+
+        runAsync(
+                () -> weatherService.fetchAirportWeather(departure + "," + destination),
+                weather -> {
+                    latestRouteResults = weather;
+                    routeHistoryRepository.saveRecentRoute(departure, destination, plannedDepartureUtc);
+                    invalidateAlternateSuggestions();
+                    refreshRecentRoutes();
+                    routeStatusLabel.setText("");
+                    rerenderRouteResults();
+                },
+                throwable -> routeStatusLabel.setText("Error: " + throwable.getMessage())
+        );
     }
 
     private void refreshFavoritesBar(TextField airportInput) {
