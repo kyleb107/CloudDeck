@@ -27,6 +27,7 @@ import com.kylebarnes.clouddeck.service.DensityAltitudeAssessment;
 import com.kylebarnes.clouddeck.service.DensityAltitudeService;
 import com.kylebarnes.clouddeck.service.AlternateAirportService;
 import com.kylebarnes.clouddeck.service.BriefingExportService;
+import com.kylebarnes.clouddeck.service.FaaChartLinkService;
 import com.kylebarnes.clouddeck.service.FlightConditionEvaluator;
 import com.kylebarnes.clouddeck.service.FlightPlanningService;
 import com.kylebarnes.clouddeck.service.OperationalAlert;
@@ -104,6 +105,7 @@ public class MainApp extends Application {
     private final RunwayAnalysisService runwayAnalysisService = new RunwayAnalysisService();
     private final FlightPlanningService flightPlanningService = new FlightPlanningService();
     private final BriefingExportService briefingExportService = new BriefingExportService();
+    private final FaaChartLinkService faaChartLinkService = new FaaChartLinkService();
     private final OperationalAlertService operationalAlertService = new OperationalAlertService();
     private final DensityAltitudeService densityAltitudeService = new DensityAltitudeService();
     private final AlternateAirportService alternateAirportService = new AlternateAirportService(
@@ -849,7 +851,27 @@ public class MainApp extends Application {
             section.getChildren().add(createMutedLabel(solarSummary));
         }
 
+        section.getChildren().add(buildChartResourcesBox(metar.airportId()));
+
         return section;
+    }
+
+    private VBox buildChartResourcesBox(String airportId) {
+        VBox chartBox = new VBox(6);
+        chartBox.getChildren().add(createSubsectionTitle("Chart Resources"));
+
+        Button diagramButton = createSecondaryButton("Airport Diagram");
+        diagramButton.setOnAction(event -> openExternalUrl(faaChartLinkService.buildAirportDiagramUrl(airportId)));
+
+        Button supplementButton = createSecondaryButton("Chart Supplement");
+        supplementButton.setOnAction(event -> openExternalUrl(faaChartLinkService.buildChartSupplementUrl(airportId)));
+
+        HBox actions = new HBox(10, diagramButton, supplementButton);
+        Label hint = createMutedLabel(
+                "Opens official FAA chart results in your browser. " + faaChartLinkService.airportSearchHint(airportId)
+        );
+        chartBox.getChildren().addAll(actions, hint);
+        return chartBox;
     }
 
     private VBox buildTafSection(TafData taf) {
@@ -1417,6 +1439,16 @@ public class MainApp extends Application {
 
         if (weatherAirportInput != null) {
             refreshFavoritesBar(weatherAirportInput);
+        }
+    }
+
+    private void openExternalUrl(String url) {
+        try {
+            getHostServices().showDocument(url);
+        } catch (Exception exception) {
+            if (routeStatusLabel != null) {
+                routeStatusLabel.setText("Could not open browser: " + exception.getMessage());
+            }
         }
     }
 
