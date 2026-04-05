@@ -479,8 +479,8 @@ public class MainApp extends Application {
 
         VBox plannerCard = createPanel(
                 "Direct Route Setup",
-                "CloudDeck assumes a direct course and applies taxi, climb, and groundspeed settings from the Settings tab.",
-                new HBox(12, routeDepartureInput, routeDestinationInput, routeDepartureTimeInput, planButton, exportButton)
+                "Enter a route, set departure time, then review the decision summary before diving into airport details.",
+                buildRoutePlannerControls(planButton, exportButton)
         );
         VBox recentRoutesCard = createPanel(
                 "Recent Routes",
@@ -488,7 +488,12 @@ public class MainApp extends Application {
                 recentRoutesBox
         );
 
-        VBox content = new VBox(16, sectionTitle, sectionSubtitle, plannerCard, recentRoutesCard, routeStatusLabel, routeResultsBox);
+        HBox topRow = new HBox(16, plannerCard, recentRoutesCard);
+        plannerCard.setMaxWidth(Double.MAX_VALUE);
+        recentRoutesCard.setPrefWidth(340);
+        HBox.setHgrow(plannerCard, Priority.ALWAYS);
+
+        VBox content = new VBox(16, sectionTitle, sectionSubtitle, topRow, routeStatusLabel, routeResultsBox);
         content.setPadding(new Insets(24));
 
         ScrollPane scrollPane = new ScrollPane(content);
@@ -1096,8 +1101,15 @@ public class MainApp extends Application {
                     );
                     routeBanner = createBanner(timedRouteAssessment.message(), timedRouteAssessment.level());
                 }
-                routeResultsBox.getChildren().add(routeBanner);
-                routeResultsBox.getChildren().add(buildRouteSummaryCard(routePlan, aircraftProfile));
+                routeResultsBox.getChildren().add(buildRouteDecisionDashboard(
+                        routeBanner,
+                        routePlan,
+                        aircraftProfile,
+                        departureWeather,
+                        destinationWeather,
+                        assessment,
+                        timedRouteAssessment
+                ));
                 routeResultsBox.getChildren().add(buildOperationalAlertsCard(
                         routePlan,
                         aircraftProfile,
@@ -1136,9 +1148,147 @@ public class MainApp extends Application {
             ));
         }
 
-        routeResultsBox.getChildren().addAll(
-                latestRouteResults.stream().map(this::buildAirportCard).collect(Collectors.toList())
+        routeResultsBox.getChildren().add(buildRouteAirportDetailsCard());
+    }
+
+    private VBox buildRouteDecisionDashboard(
+            VBox routeBanner,
+            RoutePlan routePlan,
+            AircraftProfile aircraftProfile,
+            AirportWeather departureWeather,
+            AirportWeather destinationWeather,
+            RouteAssessment assessment,
+            TimedRouteAssessment timedRouteAssessment
+    ) {
+        VBox summaryCard = buildRouteSummaryCard(routePlan, aircraftProfile);
+        summaryCard.setMaxWidth(Double.MAX_VALUE);
+
+        VBox timingCard = createPanel(
+                "Decision Snapshot",
+                "Fast route-level view before reviewing airport detail sections.",
+                routeBanner,
+                buildDecisionSnapshotMetrics(routePlan, departureWeather, destinationWeather, assessment, timedRouteAssessment)
         );
+        timingCard.setPrefWidth(340);
+
+        HBox row = new HBox(16, summaryCard, timingCard);
+        HBox.setHgrow(summaryCard, Priority.ALWAYS);
+
+        VBox wrapper = new VBox(row);
+        return wrapper;
+    }
+
+    private FlowPane buildDecisionSnapshotMetrics(
+            RoutePlan routePlan,
+            AirportWeather departureWeather,
+            AirportWeather destinationWeather,
+            RouteAssessment assessment,
+            TimedRouteAssessment timedRouteAssessment
+    ) {
+        FlowPane metrics = new FlowPane();
+        metrics.setHgap(10);
+        metrics.setVgap(10);
+
+        VfrAssessment departureCurrent = departureWeather == null ? null : flightConditionEvaluator.assessVfr(departureWeather.metar(), appSettings);
+        VfrAssessment destinationCurrent = destinationWeather == null ? null : flightConditionEvaluator.assessVfr(destinationWeather.metar(), appSettings);
+
+        metrics.getChildren().add(createMetricCard(
+                "Departure",
+                departureCurrent == null ? "N/A" : departureCurrent.level().name(),
+                statusAccentColor(departureCurrent == null ? VfrStatusLevel.WARNING : departureCurrent.level())
+        ));
+        metrics.getChildren().add(createMetricCard(
+                "Destination",
+                destinationCurrent == null ? "N/A" : destinationCurrent.level().name(),
+                statusAccentColor(destinationCurrent == null ? VfrStatusLevel.WARNING : destinationCurrent.level())
+        ));
+
+        if (timedRouteAssessment != null) {
+            metrics.getChildren().add(createMetricCard(
+                    "Planned Window",
+                    timedRouteAssessment.level().name(),
+                    decisionAccentColor(timedRouteAssessment.level())
+            ));
+        } else {
+            metrics.getChildren().add(createMetricCard(
+                    "Route Outlook",
+                    assessment.level().name(),
+                    decisionAccentColor(assessment.level())
+            ));
+        }
+
+        metrics.getChildren().add(createMetricCard(
+                "Alternates",
+                latestAlternateOptions.isEmpty() ? "None" : String.valueOf(latestAlternateOptions.size()),
+                latestAlternateOptions.isEmpty() ? themePalette.textMuted() : themePalette.cautionOrange()
+        ));
+
+        return metrics;
+    }
+
+    private VBox buildRouteAirportDetailsCard() {
+        AirportWeather departureWeather = findRouteWeather(latestRouteDeparture);
+        AirportWeather destinationWeather = findRouteWeather(latestRouteDestination);
+
+        VBox departureCard = buildCompactRouteAirportCard("Departure Detail", departureWeather);
+        VBox destinationCard = buildCompactRouteAirportCard("Destination Detail", destinationWeather);
+
+        HBox row = new HBox(16, departureCard, destinationCard);
+        HBox.setHgrow(departureCard, Priority.ALWAYS);
+        HBox.setHgrow(destinationCard, Priority.ALWAYS);
+
+        return createPanel(
+                "Airport Details",
+                "Expanded weather, runway, and chart context for each end of the route.",
+                row
+        );
+    }
+
+    private VBox buildCompactRouteAirportCard(String title, AirportWeather airportWeather) {
+        if (airportWeather == null) {
+            return createPanel(title, "No airport data available.", createMutedLabel("This side of the route could not be loaded."));
+        }
+
+        VBox card = new VBox(10);
+        card.setPadding(new Insets(16));
+        card.setStyle(panelStyle(themePalette.surfaceBackground(), true));
+
+        MetarData metar = airportWeather.metar();
+        AircraftProfile selectedProfile = aircraftSelector.getValue();
+
+        Label titleLabel = new Label(title);
+        titleLabel.setStyle("-fx-text-fill: " + themePalette.textMuted() + "; -fx-font-size: 11px; -fx-font-weight: bold;");
+
+        Label airportLabel = new Label(metar.airportId() + " - " + metar.airportName());
+        airportLabel.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 18px; -fx-font-weight: bold;");
+        airportLabel.setWrapText(true);
+
+        HBox badges = new HBox(8, createBadge(metar.flightCategory(), categoryColor(metar.flightCategory())));
+        if (selectedProfile != null) {
+            badges.getChildren().add(createBadge("XW " + formatOneDecimal(selectedProfile.maxCrosswindKts()) + " kt", themePalette.accentGold()));
+        }
+
+        FlowPane metrics = new FlowPane();
+        metrics.setHgap(10);
+        metrics.setVgap(10);
+        metrics.getChildren().addAll(
+                createMetricCard("Wind", metar.windGust() > 0
+                        ? String.format("%03d/%dG%d", metar.windDir(), metar.windSpeed(), metar.windGust())
+                        : String.format("%03d/%d", metar.windDir(), metar.windSpeed()), categoryColor(metar.flightCategory())),
+                createMetricCard("Vis", String.format("%.1f SM", metar.visibilitySm()), themePalette.accentBlue()),
+                createMetricCard("Alt", String.format("%.2f", metar.altimeterInHg()), themePalette.accentGold()),
+                createMetricCard("Temp", formatTemperature(metar.tempC()), themePalette.successGreen())
+        );
+
+        VBox sections = new VBox(
+                10,
+                buildAirportBriefingSection(airportWeather.airportInfo(), metar),
+                buildTafSection(airportWeather.taf()),
+                buildRunwaySection(metar, airportWeather.runways(), categoryColor(metar.flightCategory()), selectedProfile)
+        );
+
+        card.getChildren().addAll(titleLabel, airportLabel, badges, metrics, sections);
+        return card;
     }
 
     private VBox buildAlternatesCard() {
@@ -1449,6 +1599,28 @@ public class MainApp extends Application {
             );
             recentRoutesBox.getChildren().add(routeCard);
         }
+    }
+
+    private VBox buildRoutePlannerControls(Button planButton, Button exportButton) {
+        VBox fields = new VBox(12);
+
+        VBox departureBox = new VBox(6, formLabel("Departure"), routeDepartureInput);
+        VBox destinationBox = new VBox(6, formLabel("Destination"), routeDestinationInput);
+        VBox timeBox = new VBox(6, formLabel("Departure UTC"), routeDepartureTimeInput);
+
+        HBox firstRow = new HBox(12, departureBox, destinationBox, timeBox);
+        HBox.setHgrow(departureBox, Priority.ALWAYS);
+        HBox.setHgrow(destinationBox, Priority.ALWAYS);
+        HBox.setHgrow(timeBox, Priority.ALWAYS);
+
+        Label plannerHint = createMutedLabel(
+                "Uses the selected aircraft profile plus route assumptions from Settings. Analyze first, then export if needed."
+        );
+        HBox actionRow = new HBox(10, planButton, exportButton);
+        actionRow.setAlignment(Pos.CENTER_LEFT);
+
+        fields.getChildren().addAll(firstRow, plannerHint, actionRow);
+        return fields;
     }
 
     private void refreshFavoritesBar(TextField airportInput) {
@@ -1823,6 +1995,22 @@ public class MainApp extends Application {
             case "IFR" -> themePalette.warningRed();
             case "LIFR" -> "#d789ff";
             default -> themePalette.unknownGray();
+        };
+    }
+
+    private String statusAccentColor(VfrStatusLevel level) {
+        return switch (level) {
+            case WARNING -> themePalette.warningRed();
+            case CAUTION -> themePalette.cautionOrange();
+            case VFR -> themePalette.successGreen();
+        };
+    }
+
+    private String decisionAccentColor(RouteDecisionLevel level) {
+        return switch (level) {
+            case GO -> themePalette.successGreen();
+            case CAUTION -> themePalette.cautionOrange();
+            case NO_GO -> themePalette.warningRed();
         };
     }
 
