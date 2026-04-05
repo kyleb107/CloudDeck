@@ -1,10 +1,13 @@
 package com.kylebarnes.clouddeck.model;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public record TafPeriod(
         String label,
         String type,
+        LocalDateTime startTimeUtc,
+        LocalDateTime endTimeUtc,
         Integer windDir,
         int windSpeed,
         int windGust,

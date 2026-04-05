@@ -18,6 +18,7 @@ import com.kylebarnes.clouddeck.model.Runway;
 import com.kylebarnes.clouddeck.model.TafData;
 import com.kylebarnes.clouddeck.model.TafPeriod;
 import com.kylebarnes.clouddeck.model.TemperatureUnit;
+import com.kylebarnes.clouddeck.model.TimedRouteAssessment;
 import com.kylebarnes.clouddeck.service.CrosswindCalculator;
 import com.kylebarnes.clouddeck.service.DensityAltitudeAssessment;
 import com.kylebarnes.clouddeck.service.DensityAltitudeService;
@@ -71,6 +72,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.stream.Collectors;
 
 public class MainApp extends Application {
@@ -118,10 +122,12 @@ public class MainApp extends Application {
     private final ComboBox<AircraftProfile> aircraftSelector = new ComboBox<>();
     private final Label aircraftHeroSummary = new Label();
     private final Label aircraftHeroNote = new Label();
+    private static final DateTimeFormatter ROUTE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private AppSettings appSettings;
     private TextField weatherAirportInput;
     private Label routeStatusLabel;
+    private TextField routeDepartureTimeInput;
     private List<AirportWeather> latestWeatherResults = List.of();
     private List<AirportWeather> latestRouteResults = List.of();
     private String latestRouteDeparture;
@@ -295,6 +301,8 @@ public class MainApp extends Application {
             departureInput.setText(appSettings.homeAirport());
         }
         TextField destinationInput = createInputField("Destination ex: KDFW", 220);
+        routeDepartureTimeInput = createInputField("Departure UTC yyyy-MM-dd HH:mm", 240);
+        routeDepartureTimeInput.setText(LocalDateTime.now().plusHours(1).withMinute(0).withSecond(0).withNano(0).format(ROUTE_TIME_FORMATTER));
         attachAutocomplete(departureInput, stage);
         attachAutocomplete(destinationInput, stage);
 
@@ -307,6 +315,12 @@ public class MainApp extends Application {
 
             if (departure.isEmpty() || destination.isEmpty()) {
                 routeStatusLabel.setText("Please enter both a departure and destination.");
+                return;
+            }
+            try {
+                LocalDateTime.parse(routeDepartureTimeInput.getText().trim(), ROUTE_TIME_FORMATTER);
+            } catch (DateTimeParseException exception) {
+                routeStatusLabel.setText("Use UTC departure time format yyyy-MM-dd HH:mm.");
                 return;
             }
 
@@ -329,7 +343,7 @@ public class MainApp extends Application {
         VBox plannerCard = createPanel(
                 "Direct Route Setup",
                 "CloudDeck assumes a direct course and uses the selected aircraft's cruise speed and fuel burn.",
-                new HBox(12, departureInput, destinationInput, planButton)
+                new HBox(12, departureInput, destinationInput, routeDepartureTimeInput, planButton)
         );
 
         VBox content = new VBox(16, sectionTitle, sectionSubtitle, plannerCard, routeStatusLabel, routeResultsBox);
@@ -786,23 +800,48 @@ public class MainApp extends Application {
             return;
         }
 
+        AircraftProfile aircraftProfile = aircraftSelector.getValue();
         RouteAssessment assessment = flightConditionEvaluator.assessRoute(
                 latestRouteResults,
                 latestRouteDeparture,
                 latestRouteDestination,
                 appSettings
         );
-        routeResultsBox.getChildren().add(createBanner(assessment.message(), assessment.level()));
+        VBox routeBanner = createBanner(assessment.message(), assessment.level());
 
-        AircraftProfile aircraftProfile = aircraftSelector.getValue();
+        LocalDateTime departureTimeUtc = null;
+        TimedRouteAssessment timedRouteAssessment = null;
         if (aircraftProfile != null) {
             AirportInfo departureAirport = airportsRepository.findAirportByIcao(latestRouteDeparture);
             AirportInfo destinationAirport = airportsRepository.findAirportByIcao(latestRouteDestination);
             RoutePlan routePlan = flightPlanningService.planDirectRoute(departureAirport, destinationAirport, aircraftProfile);
             if (routePlan != null) {
+                departureTimeUtc = getPlannedDepartureTimeUtc();
+                if (departureTimeUtc != null) {
+                    AirportWeather departureWeather = latestRouteResults.stream()
+                            .filter(weather -> weather.metar().airportId().equalsIgnoreCase(latestRouteDeparture))
+                            .findFirst()
+                            .orElse(null);
+                    AirportWeather destinationWeather = latestRouteResults.stream()
+                            .filter(weather -> weather.metar().airportId().equalsIgnoreCase(latestRouteDestination))
+                            .findFirst()
+                            .orElse(null);
+                    timedRouteAssessment = flightConditionEvaluator.assessTimedRoute(
+                            departureWeather,
+                            destinationWeather,
+                            departureTimeUtc,
+                            departureTimeUtc.plusMinutes((long) Math.round(routePlan.estimatedTimeHours() * 60)),
+                            appSettings
+                    );
+                    routeBanner = createBanner(timedRouteAssessment.message(), timedRouteAssessment.level());
+                }
+                routeResultsBox.getChildren().add(routeBanner);
                 routeResultsBox.getChildren().add(buildRouteSummaryCard(routePlan, aircraftProfile));
+            } else {
+                routeResultsBox.getChildren().add(routeBanner);
             }
         } else {
+            routeResultsBox.getChildren().add(routeBanner);
             routeResultsBox.getChildren().add(createMutedLabel("Select an aircraft profile to unlock fuel and endurance planning."));
         }
 
@@ -843,6 +882,14 @@ public class MainApp extends Application {
                 ? createMutedLabel(aircraftProfile.name() + " reserve target is satisfied for a direct route.")
                 : createMutedLabel("Reserve target is not met for " + aircraftProfile.name() + ". Consider fuel, a stop, or a different aircraft.");
         note.setStyle("-fx-text-fill: " + (routePlan.reserveSatisfied() ? TEXT_MUTED : WARNING_RED) + "; -fx-font-size: 12px;");
+
+        LocalDateTime departureTimeUtc = getPlannedDepartureTimeUtc();
+        if (departureTimeUtc != null) {
+            metrics.getChildren().add(createMetricCard("Departure UTC", departureTimeUtc.format(ROUTE_TIME_FORMATTER), ACCENT_GOLD));
+            metrics.getChildren().add(createMetricCard("Arrival UTC",
+                    departureTimeUtc.plusMinutes((long) Math.round(routePlan.estimatedTimeHours() * 60)).format(ROUTE_TIME_FORMATTER),
+                    ACCENT_BLUE));
+        }
 
         VBox densityBox = new VBox(4);
         densityBox.getChildren().add(createSubsectionTitle("Performance Snapshot"));
@@ -1216,7 +1263,7 @@ public class MainApp extends Application {
     }
 
     private VfrAssessment assessTafPeriod(TafPeriod period) {
-        TafData syntheticTaf = new TafData("TEMP", "", "", "", List.of(period));
+        TafData syntheticTaf = new TafData("TEMP", "", null, "", period.startTimeUtc(), period.endTimeUtc(), "", List.of(period));
         return flightConditionEvaluator.assessTaf(syntheticTaf, appSettings);
     }
 
@@ -1249,6 +1296,17 @@ public class MainApp extends Application {
 
     private String formatOneDecimal(double value) {
         return String.format("%.1f", value);
+    }
+
+    private LocalDateTime getPlannedDepartureTimeUtc() {
+        if (routeDepartureTimeInput == null || routeDepartureTimeInput.getText().isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(routeDepartureTimeInput.getText().trim(), ROUTE_TIME_FORMATTER);
+        } catch (DateTimeParseException exception) {
+            return null;
+        }
     }
 
     private String formatTemperature(float tempC) {

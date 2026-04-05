@@ -6,7 +6,9 @@ import com.kylebarnes.clouddeck.model.AppSettings;
 import com.kylebarnes.clouddeck.model.MetarData;
 import com.kylebarnes.clouddeck.model.TafData;
 import com.kylebarnes.clouddeck.model.TafPeriod;
+import com.kylebarnes.clouddeck.model.TimedRouteAssessment;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public class FlightConditionEvaluator {
@@ -115,6 +117,76 @@ public class FlightConditionEvaluator {
         );
     }
 
+    public TimedRouteAssessment assessTimedRoute(
+            AirportWeather departure,
+            AirportWeather destination,
+            LocalDateTime departureTimeUtc,
+            LocalDateTime arrivalTimeUtc,
+            AppSettings settings
+    ) {
+        VfrAssessment departureForecast = assessForecastAtTime(departure == null ? null : departure.taf(), departureTimeUtc, settings);
+        VfrAssessment destinationForecast = assessForecastAtTime(destination == null ? null : destination.taf(), arrivalTimeUtc, settings);
+
+        VfrStatusLevel departureLevel = worstLevel(
+                departure == null ? VfrStatusLevel.WARNING : assessVfr(departure.metar(), settings).level(),
+                departureForecast == null ? VfrStatusLevel.VFR : departureForecast.level()
+        );
+        VfrStatusLevel destinationLevel = worstLevel(
+                destination == null ? VfrStatusLevel.WARNING : assessVfr(destination.metar(), settings).level(),
+                destinationForecast == null ? VfrStatusLevel.VFR : destinationForecast.level()
+        );
+
+        if (departureLevel == VfrStatusLevel.WARNING && destinationLevel == VfrStatusLevel.WARNING) {
+            return new TimedRouteAssessment(
+                    RouteDecisionLevel.NO_GO,
+                    "NO-GO - Departure and destination are below VFR minimums at the planned times.",
+                    departureTimeUtc,
+                    arrivalTimeUtc,
+                    departureForecast,
+                    destinationForecast
+            );
+        }
+        if (departureLevel == VfrStatusLevel.WARNING) {
+            return new TimedRouteAssessment(
+                    RouteDecisionLevel.NO_GO,
+                    "NO-GO - Departure conditions are below VFR minimums at the planned departure time.",
+                    departureTimeUtc,
+                    arrivalTimeUtc,
+                    departureForecast,
+                    destinationForecast
+            );
+        }
+        if (destinationLevel == VfrStatusLevel.WARNING) {
+            return new TimedRouteAssessment(
+                    RouteDecisionLevel.NO_GO,
+                    "NO-GO - Destination conditions are below VFR minimums at the planned arrival time.",
+                    departureTimeUtc,
+                    arrivalTimeUtc,
+                    departureForecast,
+                    destinationForecast
+            );
+        }
+        if (departureLevel == VfrStatusLevel.CAUTION || destinationLevel == VfrStatusLevel.CAUTION) {
+            return new TimedRouteAssessment(
+                    RouteDecisionLevel.CAUTION,
+                    "CAUTION - Marginal conditions appear at the planned departure or arrival time.",
+                    departureTimeUtc,
+                    arrivalTimeUtc,
+                    departureForecast,
+                    destinationForecast
+            );
+        }
+
+        return new TimedRouteAssessment(
+                RouteDecisionLevel.GO,
+                "GO - Planned departure and arrival times remain VFR based on current and forecast conditions.",
+                departureTimeUtc,
+                arrivalTimeUtc,
+                departureForecast,
+                destinationForecast
+        );
+    }
+
     private AirportOutlook assessAirportOutlook(AirportWeather airportWeather, AppSettings settings) {
         if (airportWeather == null) {
             return new AirportOutlook(VfrStatusLevel.WARNING);
@@ -137,6 +209,30 @@ public class FlightConditionEvaluator {
             return VfrStatusLevel.CAUTION;
         }
         return VfrStatusLevel.VFR;
+    }
+
+    private VfrAssessment assessForecastAtTime(TafData taf, LocalDateTime timeUtc, AppSettings settings) {
+        if (taf == null || timeUtc == null) {
+            return null;
+        }
+
+        TafPeriod matchingPeriod = taf.periods().stream()
+                .filter(period -> period.startTimeUtc() != null && period.endTimeUtc() != null)
+                .filter(period -> !timeUtc.isBefore(period.startTimeUtc()) && timeUtc.isBefore(period.endTimeUtc()))
+                .reduce((first, second) -> second)
+                .orElse(null);
+
+        if (matchingPeriod == null) {
+            return null;
+        }
+
+        VfrStatusLevel level = assessForecastPeriod(matchingPeriod, settings);
+        String message = switch (level) {
+            case WARNING -> "Forecast below VFR at planned time";
+            case CAUTION -> "Forecast marginal VFR at planned time";
+            case VFR -> "Forecast VFR at planned time";
+        };
+        return new VfrAssessment(level, message);
     }
 
     private VfrStatusLevel worstLevel(VfrStatusLevel left, VfrStatusLevel right) {

@@ -4,6 +4,8 @@ import com.kylebarnes.clouddeck.model.CloudLayer;
 import com.kylebarnes.clouddeck.model.TafData;
 import com.kylebarnes.clouddeck.model.TafPeriod;
 
+import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -53,16 +55,27 @@ public class TafParser {
         String issueTime = headerMatcher.group(3);
         String validPeriod = headerMatcher.group(4);
         String remainder = headerMatcher.group(5);
+        LocalDateTime issueTimeUtc = parseIssueTime(issueTime);
+        TimeRange tafValidRange = parseValidPeriod(validPeriod, issueTimeUtc);
 
-        List<TafPeriod> periods = parsePeriods(remainder, validPeriod);
+        List<TafPeriod> periods = parsePeriods(remainder, validPeriod, tafValidRange);
         String normalizedRawText = amendment == null
                 ? normalized
                 : normalized.replaceFirst("^TAF\\s+", "TAF " + amendment + " ");
 
-        return new TafData(airportId, issueTime, validPeriod, normalizedRawText, List.copyOf(periods));
+        return new TafData(
+                airportId,
+                issueTime,
+                issueTimeUtc,
+                validPeriod,
+                tafValidRange.start(),
+                tafValidRange.end(),
+                normalizedRawText,
+                List.copyOf(periods)
+        );
     }
 
-    private List<TafPeriod> parsePeriods(String remainder, String validPeriod) {
+    private List<TafPeriod> parsePeriods(String remainder, String validPeriod, TimeRange tafValidRange) {
         List<String> tokens = List.of(remainder.split("\\s+"));
         List<List<String>> rawSegments = new ArrayList<>();
 
@@ -104,31 +117,48 @@ public class TafParser {
 
         List<TafPeriod> periods = new ArrayList<>();
         for (List<String> segment : rawSegments) {
-            TafPeriod period = parsePeriod(segment);
+            TafPeriod period = parsePeriod(segment, tafValidRange);
             if (period != null) {
                 periods.add(period);
             }
         }
+        finalizeEndTimes(periods, tafValidRange.end());
         return periods;
     }
 
-    private TafPeriod parsePeriod(List<String> segment) {
+    private TafPeriod parsePeriod(List<String> segment, TimeRange tafValidRange) {
         if (segment.size() < 2) {
             return null;
         }
 
         int bodyStartIndex = 2;
         String type = segment.get(0);
+        LocalDateTime startTimeUtc = tafValidRange.start();
+        LocalDateTime endTimeUtc = null;
         String label = switch (type) {
             case "BASE" -> "Initial " + segment.get(1);
             case "FM" -> "FM " + formatCompactTime(segment.get(1));
             default -> segment.get(0) + " " + (segment.size() > 1 ? segment.get(1) : "");
         };
 
-        if (!"BASE".equals(type) && !"FM".equals(type) && segment.size() > 2 && "TEMPO".equals(segment.get(1))) {
+        if ("BASE".equals(type)) {
+            TimeRange baseRange = parseValidPeriod(segment.get(1), tafValidRange.start());
+            startTimeUtc = baseRange.start();
+            endTimeUtc = baseRange.end();
+        } else if ("FM".equals(type)) {
+            startTimeUtc = parseCompactTime(segment.get(1), tafValidRange.start());
+        } else if (!"BASE".equals(type) && !"FM".equals(type) && segment.size() > 2 && "TEMPO".equals(segment.get(1))) {
             label = segment.get(0) + " TEMPO " + segment.get(2);
+            TimeRange timeRange = parseValidPeriod(segment.get(2), tafValidRange.start());
+            startTimeUtc = timeRange.start();
+            endTimeUtc = timeRange.end();
             bodyStartIndex = 3;
         } else if (!"BASE".equals(type) && !"FM".equals(type)) {
+            if (segment.size() > 1 && segment.get(1).matches("\\d{4}/\\d{4}")) {
+                TimeRange timeRange = parseValidPeriod(segment.get(1), tafValidRange.start());
+                startTimeUtc = timeRange.start();
+                endTimeUtc = timeRange.end();
+            }
             bodyStartIndex = segment.size() > 1 && segment.get(1).matches("\\d{4}/\\d{4}") ? 2 : 1;
         }
 
@@ -177,6 +207,8 @@ public class TafParser {
         return new TafPeriod(
                 label.trim(),
                 type,
+                startTimeUtc,
+                endTimeUtc,
                 windDir,
                 windSpeed,
                 windGust,
@@ -185,6 +217,34 @@ public class TafParser {
                 List.copyOf(weatherTokens),
                 rawText
         );
+    }
+
+    private void finalizeEndTimes(List<TafPeriod> periods, LocalDateTime tafEndTime) {
+        for (int index = 0; index < periods.size(); index++) {
+            TafPeriod current = periods.get(index);
+            if (current.endTimeUtc() != null) {
+                continue;
+            }
+
+            LocalDateTime endTime = tafEndTime;
+            if (index + 1 < periods.size()) {
+                endTime = periods.get(index + 1).startTimeUtc();
+            }
+
+            periods.set(index, new TafPeriod(
+                    current.label(),
+                    current.type(),
+                    current.startTimeUtc(),
+                    endTime,
+                    current.windDir(),
+                    current.windSpeed(),
+                    current.windGust(),
+                    current.visibilitySm(),
+                    current.cloudLayers(),
+                    current.weatherTokens(),
+                    current.rawText()
+            ));
+        }
     }
 
     private ParsedVisibility parseVisibility(List<String> tokens, int index) {
@@ -247,6 +307,57 @@ public class TafParser {
         return compactTime.substring(0, 2) + "/" + compactTime.substring(2, 4) + compactTime.substring(4) + "Z";
     }
 
+    private LocalDateTime parseIssueTime(String issueTime) {
+        int day = Integer.parseInt(issueTime.substring(0, 2));
+        int hour = Integer.parseInt(issueTime.substring(2, 4));
+        int minute = Integer.parseInt(issueTime.substring(4, 6));
+        YearMonth currentMonth = YearMonth.now();
+
+        if (day > currentMonth.lengthOfMonth()) {
+            currentMonth = currentMonth.minusMonths(1);
+        }
+
+        return LocalDateTime.of(currentMonth.getYear(), currentMonth.getMonth(), day, hour, minute);
+    }
+
+    private TimeRange parseValidPeriod(String validPeriod, LocalDateTime referenceDateTime) {
+        int startDay = Integer.parseInt(validPeriod.substring(0, 2));
+        int startHour = Integer.parseInt(validPeriod.substring(2, 4));
+        int endDay = Integer.parseInt(validPeriod.substring(5, 7));
+        int endHour = Integer.parseInt(validPeriod.substring(7, 9));
+
+        LocalDateTime start = resolveDayHour(referenceDateTime, startDay, startHour);
+        LocalDateTime end = resolveDayHour(start, endDay, endHour);
+        if (!end.isAfter(start)) {
+            end = end.plusMonths(1);
+        }
+        return new TimeRange(start, end);
+    }
+
+    private LocalDateTime parseCompactTime(String compactTime, LocalDateTime referenceDateTime) {
+        int day = Integer.parseInt(compactTime.substring(0, 2));
+        int hour = Integer.parseInt(compactTime.substring(2, 4));
+        int minute = Integer.parseInt(compactTime.substring(4, 6));
+        LocalDateTime time = resolveDayHour(referenceDateTime, day, hour);
+        return time.withMinute(minute);
+    }
+
+    private LocalDateTime resolveDayHour(LocalDateTime reference, int dayOfMonth, int hour) {
+        YearMonth yearMonth = YearMonth.of(reference.getYear(), reference.getMonth());
+        if (dayOfMonth > yearMonth.lengthOfMonth()) {
+            yearMonth = yearMonth.plusMonths(1);
+        }
+
+        LocalDateTime resolved = LocalDateTime.of(yearMonth.getYear(), yearMonth.getMonth(), dayOfMonth, hour, 0);
+        if (resolved.isBefore(reference.minusDays(1))) {
+            resolved = resolved.plusMonths(1);
+        }
+        return resolved;
+    }
+
     private record ParsedVisibility(float visibilitySm, int tokensConsumed) {
+    }
+
+    private record TimeRange(LocalDateTime start, LocalDateTime end) {
     }
 }
