@@ -16,6 +16,7 @@ import com.kylebarnes.clouddeck.model.DistanceUnit;
 import com.kylebarnes.clouddeck.model.MetarData;
 import com.kylebarnes.clouddeck.model.RoutePlan;
 import com.kylebarnes.clouddeck.model.Runway;
+import com.kylebarnes.clouddeck.model.SolarTimes;
 import com.kylebarnes.clouddeck.model.TafData;
 import com.kylebarnes.clouddeck.model.TafPeriod;
 import com.kylebarnes.clouddeck.model.TemperatureUnit;
@@ -30,6 +31,7 @@ import com.kylebarnes.clouddeck.service.RouteAssessment;
 import com.kylebarnes.clouddeck.service.RouteDecisionLevel;
 import com.kylebarnes.clouddeck.service.RunwayAnalysis;
 import com.kylebarnes.clouddeck.service.RunwayAnalysisService;
+import com.kylebarnes.clouddeck.service.SolarCalculatorService;
 import com.kylebarnes.clouddeck.service.VfrAssessment;
 import com.kylebarnes.clouddeck.service.VfrStatusLevel;
 import com.kylebarnes.clouddeck.service.WeatherService;
@@ -74,7 +76,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.stream.Collectors;
@@ -113,6 +118,7 @@ public class MainApp extends Application {
             flightConditionEvaluator,
             runwayAnalysisService
     );
+    private final SolarCalculatorService solarCalculatorService = new SolarCalculatorService();
     private final FavoritesRepository favoritesRepository = new LocalFavoritesRepository();
     private final AircraftProfileRepository aircraftProfileRepository = new LocalAircraftProfileRepository();
     private final SettingsRepository settingsRepository = new LocalSettingsRepository();
@@ -131,6 +137,7 @@ public class MainApp extends Application {
     private final Label aircraftHeroSummary = new Label();
     private final Label aircraftHeroNote = new Label();
     private static final DateTimeFormatter ROUTE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final DateTimeFormatter CLOCK_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
     private AppSettings appSettings;
     private TextField weatherAirportInput;
@@ -697,6 +704,19 @@ public class MainApp extends Application {
             section.getChildren().add(densityLine);
         }
 
+        LocalDate briefingDate = extractUtcDate(metar.observationTime());
+        SolarTimes solarTimes = solarCalculatorService.calculate(airportInfo, briefingDate);
+        if (solarTimes != null) {
+            LocalDateTime observationTimeUtc = extractUtcDateTime(metar.observationTime());
+            String solarSummary = formatSolarSummary(solarTimes);
+            if (observationTimeUtc != null && observationTimeUtc.toLocalDate().equals(solarTimes.dateUtc())) {
+                solarSummary += "  |  Observation " + (solarCalculatorService.isDaylight(solarTimes, observationTimeUtc)
+                        ? "in daylight"
+                        : "at night");
+            }
+            section.getChildren().add(createMutedLabel(solarSummary));
+        }
+
         return section;
     }
 
@@ -973,10 +993,13 @@ public class MainApp extends Application {
         note.setStyle("-fx-text-fill: " + (routePlan.reserveSatisfied() ? TEXT_MUTED : WARNING_RED) + "; -fx-font-size: 12px;");
 
         LocalDateTime departureTimeUtc = getPlannedDepartureTimeUtc();
-        if (departureTimeUtc != null) {
+        LocalDateTime arrivalTimeUtc = departureTimeUtc == null
+                ? null
+                : departureTimeUtc.plusMinutes((long) Math.round(routePlan.estimatedTimeHours() * 60));
+        if (departureTimeUtc != null && arrivalTimeUtc != null) {
             metrics.getChildren().add(createMetricCard("Departure UTC", departureTimeUtc.format(ROUTE_TIME_FORMATTER), ACCENT_GOLD));
             metrics.getChildren().add(createMetricCard("Arrival UTC",
-                    departureTimeUtc.plusMinutes((long) Math.round(routePlan.estimatedTimeHours() * 60)).format(ROUTE_TIME_FORMATTER),
+                    arrivalTimeUtc.format(ROUTE_TIME_FORMATTER),
                     ACCENT_BLUE));
         }
 
@@ -991,6 +1014,37 @@ public class MainApp extends Application {
             densityBox.getChildren().add(createMutedLabel(
                     destinationAirport.ident() + " density altitude: " + destinationDensity.densityAltitudeFt() + " ft"
             ));
+        }
+
+        if (departureTimeUtc != null && arrivalTimeUtc != null) {
+            SolarTimes departureSolar = solarCalculatorService.calculate(departureAirport, departureTimeUtc.toLocalDate());
+            SolarTimes destinationSolar = solarCalculatorService.calculate(destinationAirport, arrivalTimeUtc.toLocalDate());
+
+            VBox solarBox = new VBox(4);
+            solarBox.getChildren().add(createSubsectionTitle("Daylight Snapshot"));
+            if (departureSolar != null) {
+                solarBox.getChildren().add(createMutedLabel(formatSolarPlanningLine(
+                        departureAirport.ident(),
+                        "Departure",
+                        departureSolar,
+                        departureTimeUtc
+                )));
+            }
+            if (destinationSolar != null) {
+                solarBox.getChildren().add(createMutedLabel(formatSolarPlanningLine(
+                        destinationAirport.ident(),
+                        "Arrival",
+                        destinationSolar,
+                        arrivalTimeUtc
+                )));
+            }
+
+            if (solarBox.getChildren().size() == 1) {
+                solarBox.getChildren().add(createMutedLabel("Sunrise and sunset data unavailable for one or more airports."));
+            }
+
+            densityBox.getChildren().add(new Separator());
+            densityBox.getChildren().add(solarBox);
         }
 
         return createPanel(
@@ -1410,6 +1464,42 @@ public class MainApp extends Application {
             return formatOneDecimal(distanceNm * 1.15078) + " mi";
         }
         return formatOneDecimal(distanceNm) + " nm";
+    }
+
+    private String formatSolarSummary(SolarTimes solarTimes) {
+        if (solarTimes.allDaylight()) {
+            return "Sun above horizon all day on " + solarTimes.dateUtc() + " UTC";
+        }
+        if (solarTimes.allNight()) {
+            return "Sun below horizon all day on " + solarTimes.dateUtc() + " UTC";
+        }
+        return "Sunrise " + solarTimes.sunriseUtc().toLocalTime().format(CLOCK_FORMATTER)
+                + " UTC  |  Sunset " + solarTimes.sunsetUtc().toLocalTime().format(CLOCK_FORMATTER) + " UTC";
+    }
+
+    private String formatSolarPlanningLine(String airportId, String phase, SolarTimes solarTimes, LocalDateTime timeUtc) {
+        String condition = solarCalculatorService.isDaylight(solarTimes, timeUtc) ? "daylight" : "night";
+        return airportId + " " + phase + " at " + timeUtc.toLocalTime().format(CLOCK_FORMATTER)
+                + " UTC is in " + condition + "  |  " + formatSolarSummary(solarTimes);
+    }
+
+    private LocalDateTime extractUtcDateTime(String observationTime) {
+        if (observationTime == null || observationTime.isBlank()) {
+            return null;
+        }
+        try {
+            return Instant.parse(observationTime).atOffset(ZoneOffset.UTC).toLocalDateTime();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private LocalDate extractUtcDate(String observationTime) {
+        LocalDateTime observationTimeUtc = extractUtcDateTime(observationTime);
+        if (observationTimeUtc != null) {
+            return observationTimeUtc.toLocalDate();
+        }
+        return LocalDate.now(ZoneOffset.UTC);
     }
 
     private void maybeLoadAlternateSuggestions() {
