@@ -1,77 +1,51 @@
 # CloudDeck
 
-CloudDeck is a Java-based aviation weather tool for pilots that pulls live METAR data from the FAA Aviation Weather API. Supports multiple airports, crosswind component calculations, and real-time flight category display.
+CloudDeck is a JavaFX desktop app for pilots that combines live FAA METAR data with runway analysis and route planning.
 
-<img width="793" height="658" alt="Screenshot 2026-04-01 154504" src="https://github.com/user-attachments/assets/d60fc482-7f37-4d70-b760-ffdc59731484" />
+## Current Capabilities
+- Live METAR retrieval from the FAA Aviation Weather API
+- TAF retrieval and forecast group parsing from the FAA Aviation Weather API
+- Flight category display with color-coded airport cards
+- VFR minimums assessment based on visibility and ceiling
+- Runway crosswind and headwind analysis using the OurAirports dataset
+- Route planner with current plus forecast weather assessment
+- Aircraft profiles with fuel, cruise, reserve, and crosswind planning inputs
+- Direct-route fuel and endurance summary based on the selected aircraft
+- Airport autocomplete backed by cached airport data
+- Persistent favorites stored in a local CloudDeck app directory
 
-<img width="776" height="655" alt="Screenshot 2026-04-01 154439" src="https://github.com/user-attachments/assets/bdb91fad-e85a-45e6-ad34-97649782a6ca" />
+## Stack
+- Java 21
+- JavaFX 21
+- Maven
+- `org.json`
 
-## Features
-- **METAR Fetcher**: Retrieves real-time weather data from the FAA Aviation Weather API in JSON format.
-- **METAR Parser**: Extracts key information such as wind direction, speed, altimeter setting, and flight category.
-- **Crosswind Calculator**: Computes headwind/tailwind and crosswind components for specific runways.
-- **Support for Multiple Stations**: Accepts multiple ICAO station IDs separated by commas.
-- ***NEW*** **Route Planner**: Plan a flight between two different airports based on Metar weather data.
-
-## Requirements
-- **Java Development Kit (JDK)**: Version 24 or higher (as specified in `pom.xml`).
-- **Apache Maven**: For dependency management and building the project.
-- **Internet Connection**: Required to fetch data from the FAA API.
-
-## Setup
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd AviationWeatherTracker
-   ```
-2. Build the project using Maven:
-   ```bash
-   mvn clean install
-   ```
-
-## Usage
-Run the application using Maven:
+## Run
 ```bash
-mvn exec:java -Dexec.mainClass="Main"
-```
-Or run the compiled JAR (if packaged):
-```bash
-java -cp "target/classes;target/dependency/*" Main
+mvn clean javafx:run
 ```
 
-### Example Interaction
-1. **Enter ICAO station ID**: Type an airport ID (e.g., `KLAX` or `KJFK,KSFO`).
-2. **View METAR**: The tool displays parsed data and the raw METAR string.
-3. **Crosswind Calculation**:
-   - Enter a runway heading (e.g., `25` for Runway 25).
-   - The tool outputs the headwind/tailwind and crosswind components.
-   - Enter `0` to skip or `quit` to exit the application.
+If you run from IntelliJ, use `com.kylebarnes.clouddeck.CloudDeckLauncher` as the main class.
 
-## Scripts
-- `mvn clean compile`: Compiles the source code.
-- `mvn exec:java -Dexec.mainClass="Main"`: Runs the application.
-- `mvn package`: Packages the application into a JAR file.
-
-## Environment Variables
-Currently, no environment variables are required.
-- **TODO**: Add support for an API key if the FAA API ever requires authentication.
-
-## Tests
-- **TODO**: Implement unit tests for `MetarParser` and `CrosswindCalculator` using JUnit.
-
-## Project Structure
+## Project Layout
 ```text
-AviationWeatherTracker/
-├── src/main/java/
-│   ├── Main.java                # Application entry point & CLI logic
-│   ├── MetarFetcher.java        # API communication (FAA Aviation Weather)
-│   ├── MetarParser.java         # JSON parsing logic
-│   ├── MetarData.java           # Data model for METAR information
-│   └── CrosswindCalculator.java # Wind component math
-├── pom.xml                      # Maven configuration & dependencies
-└── AviationWeatherTracker.iml   # IntelliJ IDEA project file
+src/main/java/com/kylebarnes/clouddeck/
+├── cli/       # Legacy terminal entry point
+├── data/      # FAA and OurAirports clients plus parsing
+├── model/     # Immutable domain models
+├── service/   # Flight rules, runway analysis, orchestration
+├── storage/   # Favorites persistence abstraction
+├── ui/        # JavaFX application
+└── util/      # Shared utilities such as CSV parsing
 ```
 
-## License
-Created and designed by **Kyle Barnes**.
-- **TODO**: Add a formal license (e.g., MIT, Apache 2.0) if intended for public distribution.
+## Notes
+- Favorites are stored in `~/.clouddeck/favorites.txt`
+- Aircraft profiles are stored in `~/.clouddeck/aircraft_profiles.tsv`
+- A legacy `~/clouddeck_favorites.txt` file is still read automatically for migration
+- The desktop UI is now separated from the core services so the domain layer can be reused by a future web or mobile client
+
+## Next Technical Priorities
+- Add automated tests for service and parser classes
+- Introduce TAF support and forecast-aware route decisions
+- Add aircraft profiles for crosswind and fuel-planning features
