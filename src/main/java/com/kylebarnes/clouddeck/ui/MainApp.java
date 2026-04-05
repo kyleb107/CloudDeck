@@ -6,6 +6,7 @@ import com.kylebarnes.clouddeck.data.OurAirportsRepository;
 import com.kylebarnes.clouddeck.data.TafClient;
 import com.kylebarnes.clouddeck.data.TafParser;
 import com.kylebarnes.clouddeck.model.AircraftProfile;
+import com.kylebarnes.clouddeck.model.AlternateAirportOption;
 import com.kylebarnes.clouddeck.model.AppSettings;
 import com.kylebarnes.clouddeck.model.AirportInfo;
 import com.kylebarnes.clouddeck.model.AirportSuggestion;
@@ -22,6 +23,7 @@ import com.kylebarnes.clouddeck.model.TimedRouteAssessment;
 import com.kylebarnes.clouddeck.service.CrosswindCalculator;
 import com.kylebarnes.clouddeck.service.DensityAltitudeAssessment;
 import com.kylebarnes.clouddeck.service.DensityAltitudeService;
+import com.kylebarnes.clouddeck.service.AlternateAirportService;
 import com.kylebarnes.clouddeck.service.FlightConditionEvaluator;
 import com.kylebarnes.clouddeck.service.FlightPlanningService;
 import com.kylebarnes.clouddeck.service.RouteAssessment;
@@ -105,6 +107,12 @@ public class MainApp extends Application {
     private final RunwayAnalysisService runwayAnalysisService = new RunwayAnalysisService();
     private final FlightPlanningService flightPlanningService = new FlightPlanningService();
     private final DensityAltitudeService densityAltitudeService = new DensityAltitudeService();
+    private final AlternateAirportService alternateAirportService = new AlternateAirportService(
+            airportsRepository,
+            weatherService,
+            flightConditionEvaluator,
+            runwayAnalysisService
+    );
     private final FavoritesRepository favoritesRepository = new LocalFavoritesRepository();
     private final AircraftProfileRepository aircraftProfileRepository = new LocalAircraftProfileRepository();
     private final SettingsRepository settingsRepository = new LocalSettingsRepository();
@@ -130,6 +138,9 @@ public class MainApp extends Application {
     private TextField routeDepartureTimeInput;
     private List<AirportWeather> latestWeatherResults = List.of();
     private List<AirportWeather> latestRouteResults = List.of();
+    private List<AlternateAirportOption> latestAlternateOptions = List.of();
+    private boolean alternateSuggestionsLoading;
+    private String alternateSuggestionsStatus = "";
     private String latestRouteDeparture;
     private String latestRouteDestination;
 
@@ -139,6 +150,7 @@ public class MainApp extends Application {
         reloadAircraftProfiles(appSettings.defaultAircraftName());
         aircraftSelector.valueProperty().addListener((observable, oldValue, newValue) -> {
             updateAircraftDisplays();
+            invalidateAlternateSuggestions();
             rerenderWeatherCards();
             rerenderRouteResults();
         });
@@ -333,6 +345,7 @@ public class MainApp extends Application {
                     () -> weatherService.fetchAirportWeather(departure + "," + destination),
                     weather -> {
                         latestRouteResults = weather;
+                        invalidateAlternateSuggestions();
                         routeStatusLabel.setText("");
                         rerenderRouteResults();
                     },
@@ -421,6 +434,7 @@ public class MainApp extends Application {
                 settingsRepository.saveSettings(appSettings);
                 reloadAircraftProfiles(appSettings.defaultAircraftName());
                 updateAircraftDisplays();
+                invalidateAlternateSuggestions();
                 rerenderWeatherCards();
                 rerenderRouteResults();
                 if (weatherAirportInput != null && weatherAirportInput.getText().isBlank() && !appSettings.homeAirport().isBlank()) {
@@ -845,8 +859,83 @@ public class MainApp extends Application {
             routeResultsBox.getChildren().add(createMutedLabel("Select an aircraft profile to unlock fuel and endurance planning."));
         }
 
+        if (timedRouteAssessment != null && timedRouteAssessment.level() != RouteDecisionLevel.GO) {
+            maybeLoadAlternateSuggestions();
+        } else if (assessment.level() != RouteDecisionLevel.GO) {
+            maybeLoadAlternateSuggestions();
+        }
+
+        if (alternateSuggestionsLoading) {
+            routeResultsBox.getChildren().add(createPanel(
+                    "Alternate Airports",
+                    "Searching nearby airports with better conditions and runway fit.",
+                    createMutedLabel("Loading alternates...")
+            ));
+        } else if (!latestAlternateOptions.isEmpty()) {
+            routeResultsBox.getChildren().add(buildAlternatesCard());
+        } else if (!alternateSuggestionsStatus.isBlank()) {
+            routeResultsBox.getChildren().add(createPanel(
+                    "Alternate Airports",
+                    "Nearby fallback options for the destination.",
+                    createMutedLabel(alternateSuggestionsStatus)
+            ));
+        }
+
         routeResultsBox.getChildren().addAll(
                 latestRouteResults.stream().map(this::buildAirportCard).collect(Collectors.toList())
+        );
+    }
+
+    private VBox buildAlternatesCard() {
+        VBox alternatesList = new VBox(10);
+        AircraftProfile selectedAircraft = aircraftSelector.getValue();
+
+        for (AlternateAirportOption option : latestAlternateOptions) {
+            AirportWeather weather = option.airportWeather();
+            String summary = weather.airportInfo() == null
+                    ? weather.metar().airportId()
+                    : weather.airportInfo().ident() + " - " + weather.airportInfo().name();
+
+            Label title = new Label(summary);
+            title.setStyle("-fx-text-fill: " + TEXT_PRIMARY + "; -fx-font-size: 14px; -fx-font-weight: bold;");
+
+            Label badges = new Label(
+                    weather.metar().flightCategory() + "  |  "
+                            + formatDistance(option.distanceFromDestinationNm())
+                            + " from destination  |  "
+                            + option.vfrAssessment().level()
+            );
+            badges.setStyle("-fx-text-fill: " + TEXT_MUTED + "; -fx-font-size: 12px;");
+
+            String runwayLine = "No runway suitability data available.";
+            List<RunwayAnalysis> runwayAnalysis = runwayAnalysisService.analyze(weather.metar(), weather.runways(), selectedAircraft);
+            if (!runwayAnalysis.isEmpty()) {
+                RunwayAnalysis best = runwayAnalysis.getFirst();
+                runwayLine = "Best runway " + best.runway().ident()
+                        + " with crosswind "
+                        + formatOneDecimal(Math.abs(best.components().crosswindKts()))
+                        + " kt";
+                if (best.exceedsAircraftLimit() && selectedAircraft != null) {
+                    runwayLine += " (above selected aircraft limit)";
+                }
+            }
+
+            Label summaryLabel = createMutedLabel(option.summary());
+            Label runwayLabel = createMutedLabel(runwayLine);
+
+            VBox optionCard = new VBox(4, title, badges, summaryLabel, runwayLabel);
+            optionCard.setPadding(new Insets(12));
+            optionCard.setStyle(
+                    "-fx-background-color: rgba(255,255,255,0.04); -fx-border-color: rgba(255,255,255,0.06); " +
+                            "-fx-background-radius: 14; -fx-border-radius: 14;"
+            );
+            alternatesList.getChildren().add(optionCard);
+        }
+
+        return createPanel(
+                "Alternate Airports",
+                "Nearby options ranked by weather and runway fit.",
+                alternatesList
         );
     }
 
@@ -1321,6 +1410,46 @@ public class MainApp extends Application {
             return formatOneDecimal(distanceNm * 1.15078) + " mi";
         }
         return formatOneDecimal(distanceNm) + " nm";
+    }
+
+    private void maybeLoadAlternateSuggestions() {
+        if (alternateSuggestionsLoading || !latestAlternateOptions.isEmpty() || !alternateSuggestionsStatus.isBlank()) {
+            return;
+        }
+
+        AircraftProfile selectedAircraft = aircraftSelector.getValue();
+        alternateSuggestionsLoading = true;
+        alternateSuggestionsStatus = "";
+
+        runAsync(
+                () -> alternateAirportService.suggestAlternates(
+                        latestRouteDeparture,
+                        latestRouteDestination,
+                        selectedAircraft,
+                        appSettings,
+                        4
+                ),
+                alternates -> {
+                    latestAlternateOptions = alternates;
+                    alternateSuggestionsLoading = false;
+                    alternateSuggestionsStatus = alternates.isEmpty()
+                            ? "No suitable nearby alternates were found within the search radius."
+                            : "";
+                    rerenderRouteResults();
+                },
+                throwable -> {
+                    latestAlternateOptions = List.of();
+                    alternateSuggestionsLoading = false;
+                    alternateSuggestionsStatus = "Could not load alternate airports: " + throwable.getMessage();
+                    rerenderRouteResults();
+                }
+        );
+    }
+
+    private void invalidateAlternateSuggestions() {
+        latestAlternateOptions = List.of();
+        alternateSuggestionsLoading = false;
+        alternateSuggestionsStatus = "";
     }
 
     private <T> void runAsync(CheckedSupplier<T> supplier, Consumer<T> onSuccess, Consumer<Throwable> onError) {

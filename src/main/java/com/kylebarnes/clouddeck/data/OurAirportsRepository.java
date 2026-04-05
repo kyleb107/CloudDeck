@@ -82,6 +82,44 @@ public class OurAirportsRepository {
         }
     }
 
+    public List<AirportInfo> findNearbyAirports(String icaoId, int maxResults, double radiusNm) {
+        AirportInfo origin = findAirportByIcao(icaoId);
+        if (origin == null) {
+            return List.of();
+        }
+
+        try {
+            ensureAirportsLoaded();
+            return airportInfoByIdent.values().stream()
+                    .filter(airport -> !airport.ident().equalsIgnoreCase(origin.ident()))
+                    .filter(airport -> airport.latitudeDeg() != 0 || airport.longitudeDeg() != 0)
+                    .filter(airport -> airport.airportType().contains("small_airport")
+                            || airport.airportType().contains("medium_airport")
+                            || airport.airportType().contains("large_airport"))
+                    .map(airport -> new AirportDistance(airport, distanceNm(origin, airport)))
+                    .filter(distance -> distance.distanceNm() <= radiusNm)
+                    .sorted(Comparator.comparingDouble(AirportDistance::distanceNm))
+                    .limit(maxResults)
+                    .map(AirportDistance::airport)
+                    .toList();
+        } catch (Exception exception) {
+            System.out.println("Could not find nearby airports for " + icaoId + ": " + exception.getMessage());
+            return List.of();
+        }
+    }
+
+    public double distanceNm(AirportInfo left, AirportInfo right) {
+        double lat1Rad = Math.toRadians(left.latitudeDeg());
+        double lat2Rad = Math.toRadians(right.latitudeDeg());
+        double deltaLat = Math.toRadians(right.latitudeDeg() - left.latitudeDeg());
+        double deltaLon = Math.toRadians(right.longitudeDeg() - left.longitudeDeg());
+        double a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2)
+                + Math.cos(lat1Rad) * Math.cos(lat2Rad)
+                * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return 3440.065 * c;
+    }
+
     private boolean matchesAirportQuery(AirportSuggestion airport, String query) {
         return airport.ident().toUpperCase(Locale.US).startsWith(query)
                 || airport.name().toUpperCase(Locale.US).contains(query)
@@ -207,5 +245,8 @@ public class OurAirportsRepository {
 
     private String clean(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private record AirportDistance(AirportInfo airport, double distanceNm) {
     }
 }

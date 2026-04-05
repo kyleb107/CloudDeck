@@ -42,6 +42,10 @@ public class WeatherService {
 
     public List<AirportWeather> fetchAirportWeather(String input) throws Exception {
         List<String> airportIds = parseAirportIds(input);
+        return fetchAirportWeather(airportIds);
+    }
+
+    public List<AirportWeather> fetchAirportWeather(List<String> airportIds) throws Exception {
         if (airportIds.isEmpty()) {
             throw new IllegalArgumentException("Please enter at least one ICAO airport ID.");
         }
