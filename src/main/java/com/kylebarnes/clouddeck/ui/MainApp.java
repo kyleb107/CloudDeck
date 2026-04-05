@@ -28,6 +28,8 @@ import com.kylebarnes.clouddeck.service.DensityAltitudeService;
 import com.kylebarnes.clouddeck.service.AlternateAirportService;
 import com.kylebarnes.clouddeck.service.FlightConditionEvaluator;
 import com.kylebarnes.clouddeck.service.FlightPlanningService;
+import com.kylebarnes.clouddeck.service.OperationalAlert;
+import com.kylebarnes.clouddeck.service.OperationalAlertService;
 import com.kylebarnes.clouddeck.service.RouteAssessment;
 import com.kylebarnes.clouddeck.service.RouteDecisionLevel;
 import com.kylebarnes.clouddeck.service.RunwayAnalysis;
@@ -99,6 +101,7 @@ public class MainApp extends Application {
     private final FlightConditionEvaluator flightConditionEvaluator = new FlightConditionEvaluator();
     private final RunwayAnalysisService runwayAnalysisService = new RunwayAnalysisService();
     private final FlightPlanningService flightPlanningService = new FlightPlanningService();
+    private final OperationalAlertService operationalAlertService = new OperationalAlertService();
     private final DensityAltitudeService densityAltitudeService = new DensityAltitudeService();
     private final AlternateAirportService alternateAirportService = new AlternateAirportService(
             airportsRepository,
@@ -915,18 +918,18 @@ public class MainApp extends Application {
         if (aircraftProfile != null) {
             AirportInfo departureAirport = airportsRepository.findAirportByIcao(latestRouteDeparture);
             AirportInfo destinationAirport = airportsRepository.findAirportByIcao(latestRouteDestination);
+            AirportWeather departureWeather = latestRouteResults.stream()
+                    .filter(weather -> weather.metar().airportId().equalsIgnoreCase(latestRouteDeparture))
+                    .findFirst()
+                    .orElse(null);
+            AirportWeather destinationWeather = latestRouteResults.stream()
+                    .filter(weather -> weather.metar().airportId().equalsIgnoreCase(latestRouteDestination))
+                    .findFirst()
+                    .orElse(null);
             RoutePlan routePlan = flightPlanningService.planDirectRoute(departureAirport, destinationAirport, aircraftProfile, appSettings);
             if (routePlan != null) {
                 departureTimeUtc = getPlannedDepartureTimeUtc();
                 if (departureTimeUtc != null) {
-                    AirportWeather departureWeather = latestRouteResults.stream()
-                            .filter(weather -> weather.metar().airportId().equalsIgnoreCase(latestRouteDeparture))
-                            .findFirst()
-                            .orElse(null);
-                    AirportWeather destinationWeather = latestRouteResults.stream()
-                            .filter(weather -> weather.metar().airportId().equalsIgnoreCase(latestRouteDestination))
-                            .findFirst()
-                            .orElse(null);
                     timedRouteAssessment = flightConditionEvaluator.assessTimedRoute(
                             departureWeather,
                             destinationWeather,
@@ -938,6 +941,14 @@ public class MainApp extends Application {
                 }
                 routeResultsBox.getChildren().add(routeBanner);
                 routeResultsBox.getChildren().add(buildRouteSummaryCard(routePlan, aircraftProfile));
+                routeResultsBox.getChildren().add(buildOperationalAlertsCard(
+                        routePlan,
+                        aircraftProfile,
+                        departureWeather,
+                        destinationWeather,
+                        assessment,
+                        timedRouteAssessment
+                ));
             } else {
                 routeResultsBox.getChildren().add(routeBanner);
             }
@@ -1023,6 +1034,90 @@ public class MainApp extends Application {
                 "Alternate Airports",
                 "Nearby options ranked by weather and runway fit.",
                 alternatesList
+        );
+    }
+
+    private VBox buildOperationalAlertsCard(
+            RoutePlan routePlan,
+            AircraftProfile aircraftProfile,
+            AirportWeather departureWeather,
+            AirportWeather destinationWeather,
+            RouteAssessment routeAssessment,
+            TimedRouteAssessment timedRouteAssessment
+    ) {
+        List<RunwayAnalysis> departureRunways = departureWeather == null
+                ? List.of()
+                : runwayAnalysisService.analyze(departureWeather.metar(), departureWeather.runways(), aircraftProfile);
+        List<RunwayAnalysis> destinationRunways = destinationWeather == null
+                ? List.of()
+                : runwayAnalysisService.analyze(destinationWeather.metar(), destinationWeather.runways(), aircraftProfile);
+
+        boolean departureInDaylight = true;
+        boolean arrivalInDaylight = true;
+        LocalDateTime departureTimeUtc = getPlannedDepartureTimeUtc();
+        LocalDateTime arrivalTimeUtc = departureTimeUtc == null
+                ? null
+                : departureTimeUtc.plusMinutes((long) Math.round(routePlan.estimatedTimeHours() * 60));
+        if (departureTimeUtc != null) {
+            SolarTimes departureSolar = solarCalculatorService.calculate(routePlan.departureAirport(), departureTimeUtc.toLocalDate());
+            if (departureSolar != null) {
+                departureInDaylight = solarCalculatorService.isDaylight(departureSolar, departureTimeUtc);
+            }
+        }
+        if (arrivalTimeUtc != null) {
+            SolarTimes destinationSolar = solarCalculatorService.calculate(routePlan.destinationAirport(), arrivalTimeUtc.toLocalDate());
+            if (destinationSolar != null) {
+                arrivalInDaylight = solarCalculatorService.isDaylight(destinationSolar, arrivalTimeUtc);
+            }
+        }
+
+        List<OperationalAlert> alerts = operationalAlertService.buildRouteAlerts(
+                routePlan,
+                aircraftProfile,
+                departureWeather,
+                destinationWeather,
+                departureRunways,
+                destinationRunways,
+                routeAssessment,
+                timedRouteAssessment,
+                departureInDaylight,
+                arrivalInDaylight,
+                !latestAlternateOptions.isEmpty(),
+                appSettings
+        );
+
+        if (alerts.isEmpty()) {
+            return createPanel(
+                    "Operational Alerts",
+                    "CloudDeck summarizes route-specific risks here.",
+                    createMutedLabel("No additional operational alerts for the current assumptions.")
+            );
+        }
+
+        VBox alertList = new VBox(10);
+        for (OperationalAlert alert : alerts) {
+            Label title = new Label(alert.title());
+            title.setWrapText(true);
+            title.setStyle(switch (alert.level()) {
+                case WARNING -> "-fx-text-fill: " + themePalette.warningRed() + "; -fx-font-size: 13px; -fx-font-weight: bold;";
+                case CAUTION -> "-fx-text-fill: " + themePalette.cautionOrange() + "; -fx-font-size: 13px; -fx-font-weight: bold;";
+                case VFR -> "-fx-text-fill: " + themePalette.successGreen() + "; -fx-font-size: 13px; -fx-font-weight: bold;";
+            });
+
+            Label detail = createMutedLabel(alert.detail());
+            VBox item = new VBox(4, title, detail);
+            item.setPadding(new Insets(12));
+            item.setStyle(
+                    "-fx-background-color: " + themePalette.metricBackground() + "; -fx-border-color: " + themePalette.metricBorder() + "; " +
+                            "-fx-background-radius: 14; -fx-border-radius: 14;"
+            );
+            alertList.getChildren().add(item);
+        }
+
+        return createPanel(
+                "Operational Alerts",
+                "Centralized warnings for weather, runway fit, fuel, and daylight timing.",
+                alertList
         );
     }
 
