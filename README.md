@@ -11,6 +11,7 @@ CloudDeck is a JavaFX desktop app for pilots that combines live FAA METAR data w
 - Route planner with current plus forecast weather assessment
 - Aircraft profiles with fuel, cruise, reserve, and crosswind planning inputs
 - Direct-route fuel and endurance summary based on the selected aircraft
+- Airport briefing details with field elevation and density altitude advisories
 - Airport autocomplete backed by cached airport data
 - Persistent favorites stored in a local CloudDeck app directory
 

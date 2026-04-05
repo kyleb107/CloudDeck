@@ -16,6 +16,8 @@ import com.kylebarnes.clouddeck.model.Runway;
 import com.kylebarnes.clouddeck.model.TafData;
 import com.kylebarnes.clouddeck.model.TafPeriod;
 import com.kylebarnes.clouddeck.service.CrosswindCalculator;
+import com.kylebarnes.clouddeck.service.DensityAltitudeAssessment;
+import com.kylebarnes.clouddeck.service.DensityAltitudeService;
 import com.kylebarnes.clouddeck.service.FlightConditionEvaluator;
 import com.kylebarnes.clouddeck.service.FlightPlanningService;
 import com.kylebarnes.clouddeck.service.RouteAssessment;
@@ -93,6 +95,7 @@ public class MainApp extends Application {
     private final FlightConditionEvaluator flightConditionEvaluator = new FlightConditionEvaluator();
     private final RunwayAnalysisService runwayAnalysisService = new RunwayAnalysisService();
     private final FlightPlanningService flightPlanningService = new FlightPlanningService();
+    private final DensityAltitudeService densityAltitudeService = new DensityAltitudeService();
     private final FavoritesRepository favoritesRepository = new LocalFavoritesRepository();
     private final AircraftProfileRepository aircraftProfileRepository = new LocalAircraftProfileRepository();
     private final ExecutorService backgroundExecutor = Executors.newCachedThreadPool(runnable -> {
@@ -426,6 +429,7 @@ public class MainApp extends Application {
     }
     private VBox buildAirportCard(AirportWeather airportWeather) {
         AircraftProfile selectedProfile = aircraftSelector.getValue();
+        AirportInfo airportInfo = airportWeather.airportInfo();
         MetarData metar = airportWeather.metar();
         VBox card = new VBox(10);
         card.setPadding(new Insets(18));
@@ -475,6 +479,7 @@ public class MainApp extends Application {
                 "Clouds: " + metar.cloudLayersSummary() + "  |  Observation: " + metar.observationTime().replace("T", " ").replace(".000Z", "Z")
         );
 
+        VBox airportBriefingSection = buildAirportBriefingSection(airportInfo, metar);
         VBox tafSection = buildTafSection(airportWeather.taf());
         VBox runwaySection = buildRunwaySection(metar, airportWeather.runways(), categoryColor, selectedProfile);
 
@@ -482,8 +487,43 @@ public class MainApp extends Application {
         rawLabel.setStyle("-fx-text-fill: #7f95ab; -fx-font-family: 'Courier New'; -fx-font-size: 11px;");
         rawLabel.setWrapText(true);
 
-        card.getChildren().addAll(header, nameLabel, metricStrip, vfrLabel, detailsLabel, tafSection, runwaySection, rawLabel);
+        card.getChildren().addAll(header, nameLabel, metricStrip, vfrLabel, detailsLabel, airportBriefingSection, tafSection, runwaySection, rawLabel);
         return card;
+    }
+
+    private VBox buildAirportBriefingSection(AirportInfo airportInfo, MetarData metar) {
+        VBox section = new VBox(6);
+        section.getChildren().add(new Separator());
+        section.getChildren().add(createSubsectionTitle("Airport Briefing"));
+
+        if (airportInfo == null) {
+            section.getChildren().add(createMutedLabel("Airport details unavailable for this station."));
+            return section;
+        }
+
+        String airportType = airportInfo.airportType().replace('_', ' ');
+        Label basics = makeInfoLabel(
+                airportInfo.municipality() + ", " + airportInfo.isoRegion() + "  |  " +
+                        airportType + "  |  Field elev " + airportInfo.elevationFt() + " ft"
+        );
+        basics.setStyle("-fx-text-fill: " + TEXT_PRIMARY + "; -fx-font-size: 12px;");
+        section.getChildren().add(basics);
+
+        DensityAltitudeAssessment densityAssessment = densityAltitudeService.assess(airportInfo, metar);
+        if (densityAssessment != null) {
+            Label densityLine = createStatusLine(
+                    densityAssessment.message()
+                            + " Density altitude "
+                            + densityAssessment.densityAltitudeFt()
+                            + " ft (pressure altitude "
+                            + densityAssessment.pressureAltitudeFt()
+                            + " ft).",
+                    densityAssessment.level()
+            );
+            section.getChildren().add(densityLine);
+        }
+
+        return section;
     }
 
     private VBox buildTafSection(TafData taf) {
@@ -636,15 +676,45 @@ public class MainApp extends Application {
                         routePlan.reserveSatisfied() ? SUCCESS_GREEN : WARNING_RED)
         );
 
+        AirportInfo departureAirport = routePlan.departureAirport();
+        AirportInfo destinationAirport = routePlan.destinationAirport();
+        AirportWeather departureWeather = latestRouteResults.stream()
+                .filter(weather -> weather.metar().airportId().equalsIgnoreCase(departureAirport.ident()))
+                .findFirst()
+                .orElse(null);
+        AirportWeather destinationWeather = latestRouteResults.stream()
+                .filter(weather -> weather.metar().airportId().equalsIgnoreCase(destinationAirport.ident()))
+                .findFirst()
+                .orElse(null);
+
+        DensityAltitudeAssessment departureDensity = departureWeather == null ? null
+                : densityAltitudeService.assess(departureAirport, departureWeather.metar());
+        DensityAltitudeAssessment destinationDensity = destinationWeather == null ? null
+                : densityAltitudeService.assess(destinationAirport, destinationWeather.metar());
+
         Label note = routePlan.reserveSatisfied()
                 ? createMutedLabel(aircraftProfile.name() + " reserve target is satisfied for a direct route.")
                 : createMutedLabel("Reserve target is not met for " + aircraftProfile.name() + ". Consider fuel, a stop, or a different aircraft.");
         note.setStyle("-fx-text-fill: " + (routePlan.reserveSatisfied() ? TEXT_MUTED : WARNING_RED) + "; -fx-font-size: 12px;");
 
+        VBox densityBox = new VBox(4);
+        densityBox.getChildren().add(createSubsectionTitle("Performance Snapshot"));
+        if (departureDensity != null) {
+            densityBox.getChildren().add(createMutedLabel(
+                    departureAirport.ident() + " density altitude: " + departureDensity.densityAltitudeFt() + " ft"
+            ));
+        }
+        if (destinationDensity != null) {
+            densityBox.getChildren().add(createMutedLabel(
+                    destinationAirport.ident() + " density altitude: " + destinationDensity.densityAltitudeFt() + " ft"
+            ));
+        }
+
         return createPanel(
                 "Aircraft Planning Summary",
                 routePlan.departureAirport().ident() + " to " + routePlan.destinationAirport().ident() + " using " + aircraftProfile.name(),
                 metrics,
+                densityBox,
                 note
         );
     }

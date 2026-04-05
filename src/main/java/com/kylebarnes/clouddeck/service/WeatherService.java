@@ -5,6 +5,7 @@ import com.kylebarnes.clouddeck.data.MetarParser;
 import com.kylebarnes.clouddeck.data.OurAirportsRepository;
 import com.kylebarnes.clouddeck.data.TafClient;
 import com.kylebarnes.clouddeck.data.TafParser;
+import com.kylebarnes.clouddeck.model.AirportInfo;
 import com.kylebarnes.clouddeck.model.AirportWeather;
 import com.kylebarnes.clouddeck.model.MetarData;
 import com.kylebarnes.clouddeck.model.TafData;
@@ -71,7 +72,9 @@ public class WeatherService {
 
         List<AirportWeather> airportWeather = new ArrayList<>();
         for (MetarData metar : metars) {
+            AirportInfo airportInfo = airportsRepository.findAirportByIcao(metar.airportId());
             airportWeather.add(new AirportWeather(
+                    airportInfo,
                     metar,
                     tafByAirport.get(metar.airportId()),
                     airportsRepository.findRunways(metar.airportId())
