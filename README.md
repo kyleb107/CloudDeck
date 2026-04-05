@@ -12,6 +12,7 @@ CloudDeck is a JavaFX desktop app for pilots that combines live FAA METAR data w
 - Aircraft profiles with fuel, cruise, reserve, and crosswind planning inputs
 - Direct-route fuel and endurance summary based on the selected aircraft
 - Airport briefing details with field elevation and density altitude advisories
+- App-wide settings for home airport, default aircraft, units, and planning thresholds
 - Airport autocomplete backed by cached airport data
 - Persistent favorites stored in a local CloudDeck app directory
 
@@ -43,6 +44,7 @@ src/main/java/com/kylebarnes/clouddeck/
 ## Notes
 - Favorites are stored in `~/.clouddeck/favorites.txt`
 - Aircraft profiles are stored in `~/.clouddeck/aircraft_profiles.tsv`
+- App settings are stored in `~/.clouddeck/settings.properties`
 - A legacy `~/clouddeck_favorites.txt` file is still read automatically for migration
 - The desktop UI is now separated from the core services so the domain layer can be reused by a future web or mobile client
 

@@ -6,15 +6,18 @@ import com.kylebarnes.clouddeck.data.OurAirportsRepository;
 import com.kylebarnes.clouddeck.data.TafClient;
 import com.kylebarnes.clouddeck.data.TafParser;
 import com.kylebarnes.clouddeck.model.AircraftProfile;
+import com.kylebarnes.clouddeck.model.AppSettings;
 import com.kylebarnes.clouddeck.model.AirportInfo;
 import com.kylebarnes.clouddeck.model.AirportSuggestion;
 import com.kylebarnes.clouddeck.model.AirportWeather;
 import com.kylebarnes.clouddeck.model.CrosswindComponents;
+import com.kylebarnes.clouddeck.model.DistanceUnit;
 import com.kylebarnes.clouddeck.model.MetarData;
 import com.kylebarnes.clouddeck.model.RoutePlan;
 import com.kylebarnes.clouddeck.model.Runway;
 import com.kylebarnes.clouddeck.model.TafData;
 import com.kylebarnes.clouddeck.model.TafPeriod;
+import com.kylebarnes.clouddeck.model.TemperatureUnit;
 import com.kylebarnes.clouddeck.service.CrosswindCalculator;
 import com.kylebarnes.clouddeck.service.DensityAltitudeAssessment;
 import com.kylebarnes.clouddeck.service.DensityAltitudeService;
@@ -31,6 +34,8 @@ import com.kylebarnes.clouddeck.storage.AircraftProfileRepository;
 import com.kylebarnes.clouddeck.storage.FavoritesRepository;
 import com.kylebarnes.clouddeck.storage.LocalAircraftProfileRepository;
 import com.kylebarnes.clouddeck.storage.LocalFavoritesRepository;
+import com.kylebarnes.clouddeck.storage.LocalSettingsRepository;
+import com.kylebarnes.clouddeck.storage.SettingsRepository;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Bounds;
@@ -98,6 +103,7 @@ public class MainApp extends Application {
     private final DensityAltitudeService densityAltitudeService = new DensityAltitudeService();
     private final FavoritesRepository favoritesRepository = new LocalFavoritesRepository();
     private final AircraftProfileRepository aircraftProfileRepository = new LocalAircraftProfileRepository();
+    private final SettingsRepository settingsRepository = new LocalSettingsRepository();
     private final ExecutorService backgroundExecutor = Executors.newCachedThreadPool(runnable -> {
         Thread thread = new Thread(runnable);
         thread.setDaemon(true);
@@ -113,6 +119,7 @@ public class MainApp extends Application {
     private final Label aircraftHeroSummary = new Label();
     private final Label aircraftHeroNote = new Label();
 
+    private AppSettings appSettings;
     private TextField weatherAirportInput;
     private Label routeStatusLabel;
     private List<AirportWeather> latestWeatherResults = List.of();
@@ -122,7 +129,8 @@ public class MainApp extends Application {
 
     @Override
     public void start(Stage stage) {
-        reloadAircraftProfiles(null);
+        appSettings = settingsRepository.loadSettings();
+        reloadAircraftProfiles(appSettings.defaultAircraftName());
         aircraftSelector.valueProperty().addListener((observable, oldValue, newValue) -> {
             updateAircraftDisplays();
             rerenderWeatherCards();
@@ -136,7 +144,8 @@ public class MainApp extends Application {
         TabPane tabPane = new TabPane(
                 new Tab("Weather", buildWeatherTab(stage)),
                 new Tab("Route Planner", buildRouteTab(stage)),
-                new Tab("Aircraft", buildAircraftTab())
+                new Tab("Aircraft", buildAircraftTab()),
+                new Tab("Settings", buildSettingsTab(stage))
         );
         tabPane.getTabs().forEach(tab -> tab.setClosable(false));
         tabPane.setStyle("-fx-background-color: transparent;");
@@ -213,9 +222,18 @@ public class MainApp extends Application {
         Label sectionSubtitle = createSectionSubtitle("Search airports, review TAF outlooks, and compare runway suitability against your selected aircraft.");
 
         weatherAirportInput = createInputField("Enter ICAO ID(s) ex: KDFW, KHOU, KLFK", 420);
+        if (!appSettings.homeAirport().isBlank()) {
+            weatherAirportInput.setText(appSettings.homeAirport());
+        }
         attachAutocomplete(weatherAirportInput, stage);
 
         Button fetchButton = createPrimaryButton("Load Briefing");
+        Button homeButton = createSecondaryButton("Use Home");
+        homeButton.setOnAction(event -> {
+            if (!appSettings.homeAirport().isBlank()) {
+                weatherAirportInput.setText(appSettings.homeAirport());
+            }
+        });
         Label statusLabel = createMutedLabel("");
 
         fetchButton.setOnAction(event -> {
@@ -243,7 +261,7 @@ public class MainApp extends Application {
         VBox controlsCard = createPanel(
                 "Airport Search",
                 "Separate multiple ICAO identifiers with commas.",
-                new HBox(12, weatherAirportInput, fetchButton)
+                new HBox(12, weatherAirportInput, fetchButton, homeButton)
         );
 
         VBox favoritesCard = createPanel(
@@ -273,6 +291,9 @@ public class MainApp extends Application {
         Label sectionSubtitle = createSectionSubtitle("Pair current conditions with forecast periods, direct distance, and fuel reserve checks.");
 
         TextField departureInput = createInputField("Departure ex: KLFK", 220);
+        if (!appSettings.homeAirport().isBlank()) {
+            departureInput.setText(appSettings.homeAirport());
+        }
         TextField destinationInput = createInputField("Destination ex: KDFW", 220);
         attachAutocomplete(departureInput, stage);
         attachAutocomplete(destinationInput, stage);
@@ -312,6 +333,131 @@ public class MainApp extends Application {
         );
 
         VBox content = new VBox(16, sectionTitle, sectionSubtitle, plannerCard, routeStatusLabel, routeResultsBox);
+        content.setPadding(new Insets(24));
+
+        ScrollPane scrollPane = new ScrollPane(content);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        return scrollPane;
+    }
+
+    private ScrollPane buildSettingsTab(Stage stage) {
+        Label sectionTitle = createSectionTitle("Settings");
+        Label sectionSubtitle = createSectionSubtitle("Define defaults and thresholds that future planning features can reuse.");
+
+        TextField homeAirportField = createInputField("Home airport ICAO", 220);
+        homeAirportField.setText(appSettings.homeAirport());
+        attachAutocomplete(homeAirportField, stage);
+
+        ComboBox<TemperatureUnit> temperatureUnitBox = new ComboBox<>();
+        temperatureUnitBox.getItems().setAll(TemperatureUnit.values());
+        temperatureUnitBox.setValue(appSettings.temperatureUnit());
+        temperatureUnitBox.setPrefWidth(220);
+
+        ComboBox<DistanceUnit> distanceUnitBox = new ComboBox<>();
+        distanceUnitBox.getItems().setAll(DistanceUnit.values());
+        distanceUnitBox.setValue(appSettings.distanceUnit());
+        distanceUnitBox.setPrefWidth(220);
+
+        ComboBox<AircraftProfile> defaultAircraftBox = new ComboBox<>();
+        defaultAircraftBox.getItems().setAll(aircraftProfileRepository.loadProfiles());
+        defaultAircraftBox.setPrefWidth(260);
+        for (AircraftProfile profile : defaultAircraftBox.getItems()) {
+            if (profile.name().equalsIgnoreCase(appSettings.defaultAircraftName())) {
+                defaultAircraftBox.setValue(profile);
+                break;
+            }
+        }
+        if (defaultAircraftBox.getValue() == null && !defaultAircraftBox.getItems().isEmpty()) {
+            defaultAircraftBox.setValue(defaultAircraftBox.getItems().getFirst());
+        }
+
+        TextField warningVisibilityField = createInputField("Warning visibility SM", 160);
+        warningVisibilityField.setText(String.valueOf(appSettings.vfrWarningVisibilitySm()));
+        TextField warningCeilingField = createInputField("Warning ceiling ft", 160);
+        warningCeilingField.setText(String.valueOf(appSettings.vfrWarningCeilingFt()));
+        TextField cautionVisibilityField = createInputField("Caution visibility SM", 160);
+        cautionVisibilityField.setText(String.valueOf(appSettings.vfrCautionVisibilitySm()));
+        TextField cautionCeilingField = createInputField("Caution ceiling ft", 160);
+        cautionCeilingField.setText(String.valueOf(appSettings.vfrCautionCeilingFt()));
+        TextField densityCautionField = createInputField("Density caution ft", 160);
+        densityCautionField.setText(String.valueOf(appSettings.densityAltitudeCautionFt()));
+        TextField densityWarningField = createInputField("Density warning ft", 160);
+        densityWarningField.setText(String.valueOf(appSettings.densityAltitudeWarningFt()));
+
+        Label settingsStatus = createMutedLabel("");
+        Button saveSettingsButton = createPrimaryButton("Save Settings");
+        saveSettingsButton.setOnAction(event -> {
+            try {
+                AircraftProfile defaultProfile = defaultAircraftBox.getValue();
+                AppSettings updatedSettings = new AppSettings(
+                        homeAirportField.getText().trim().toUpperCase(),
+                        defaultProfile == null ? "" : defaultProfile.name(),
+                        temperatureUnitBox.getValue(),
+                        distanceUnitBox.getValue(),
+                        Float.parseFloat(warningVisibilityField.getText().trim()),
+                        Integer.parseInt(warningCeilingField.getText().trim()),
+                        Float.parseFloat(cautionVisibilityField.getText().trim()),
+                        Integer.parseInt(cautionCeilingField.getText().trim()),
+                        Integer.parseInt(densityCautionField.getText().trim()),
+                        Integer.parseInt(densityWarningField.getText().trim())
+                );
+
+                appSettings = updatedSettings;
+                settingsRepository.saveSettings(appSettings);
+                reloadAircraftProfiles(appSettings.defaultAircraftName());
+                updateAircraftDisplays();
+                rerenderWeatherCards();
+                rerenderRouteResults();
+                if (weatherAirportInput != null && weatherAirportInput.getText().isBlank() && !appSettings.homeAirport().isBlank()) {
+                    weatherAirportInput.setText(appSettings.homeAirport());
+                }
+                settingsStatus.setText("Settings saved.");
+            } catch (NumberFormatException exception) {
+                settingsStatus.setText("Use valid numbers for thresholds.");
+            }
+        });
+
+        GridPane defaultsGrid = new GridPane();
+        defaultsGrid.setHgap(14);
+        defaultsGrid.setVgap(12);
+        defaultsGrid.add(formLabel("Home Airport"), 0, 0);
+        defaultsGrid.add(homeAirportField, 1, 0);
+        defaultsGrid.add(formLabel("Default Aircraft"), 0, 1);
+        defaultsGrid.add(defaultAircraftBox, 1, 1);
+        defaultsGrid.add(formLabel("Temperature Unit"), 0, 2);
+        defaultsGrid.add(temperatureUnitBox, 1, 2);
+        defaultsGrid.add(formLabel("Distance Unit"), 0, 3);
+        defaultsGrid.add(distanceUnitBox, 1, 3);
+
+        GridPane thresholdsGrid = new GridPane();
+        thresholdsGrid.setHgap(14);
+        thresholdsGrid.setVgap(12);
+        thresholdsGrid.add(formLabel("VFR Warning Vis"), 0, 0);
+        thresholdsGrid.add(warningVisibilityField, 1, 0);
+        thresholdsGrid.add(formLabel("VFR Warning Ceiling"), 2, 0);
+        thresholdsGrid.add(warningCeilingField, 3, 0);
+        thresholdsGrid.add(formLabel("VFR Caution Vis"), 0, 1);
+        thresholdsGrid.add(cautionVisibilityField, 1, 1);
+        thresholdsGrid.add(formLabel("VFR Caution Ceiling"), 2, 1);
+        thresholdsGrid.add(cautionCeilingField, 3, 1);
+        thresholdsGrid.add(formLabel("DA Caution"), 0, 2);
+        thresholdsGrid.add(densityCautionField, 1, 2);
+        thresholdsGrid.add(formLabel("DA Warning"), 2, 2);
+        thresholdsGrid.add(densityWarningField, 3, 2);
+
+        VBox defaultsCard = createPanel(
+                "Defaults",
+                "Set values the app should restore at launch.",
+                defaultsGrid
+        );
+        VBox thresholdsCard = createPanel(
+                "Thresholds",
+                "These feed current VFR and density altitude advisories.",
+                thresholdsGrid
+        );
+
+        VBox content = new VBox(16, sectionTitle, sectionSubtitle, defaultsCard, thresholdsCard, saveSettingsButton, settingsStatus);
         content.setPadding(new Insets(24));
 
         ScrollPane scrollPane = new ScrollPane(content);
@@ -469,10 +615,10 @@ public class MainApp extends Application {
                         : String.format("%03d deg @ %d kt", metar.windDir(), metar.windSpeed()), categoryColor),
                 createMetricCard("Visibility", String.format("%.1f SM", metar.visibilitySm()), ACCENT_BLUE),
                 createMetricCard("Altimeter", String.format("%.2f inHg", metar.altimeterInHg()), ACCENT_GOLD),
-                createMetricCard("Temperature", String.format("%.1f F", (metar.tempC() * 9 / 5) + 32), SUCCESS_GREEN)
+                createMetricCard("Temperature", formatTemperature(metar.tempC()), SUCCESS_GREEN)
         );
 
-        VfrAssessment vfrAssessment = flightConditionEvaluator.assessVfr(metar);
+        VfrAssessment vfrAssessment = flightConditionEvaluator.assessVfr(metar, appSettings);
         Label vfrLabel = createStatusLine(vfrAssessment.message(), vfrAssessment.level());
 
         Label detailsLabel = makeInfoLabel(
@@ -509,7 +655,7 @@ public class MainApp extends Application {
         basics.setStyle("-fx-text-fill: " + TEXT_PRIMARY + "; -fx-font-size: 12px;");
         section.getChildren().add(basics);
 
-        DensityAltitudeAssessment densityAssessment = densityAltitudeService.assess(airportInfo, metar);
+        DensityAltitudeAssessment densityAssessment = densityAltitudeService.assess(airportInfo, metar, appSettings);
         if (densityAssessment != null) {
             Label densityLine = createStatusLine(
                     densityAssessment.message()
@@ -536,7 +682,7 @@ public class MainApp extends Application {
             return section;
         }
 
-        VfrAssessment tafAssessment = flightConditionEvaluator.assessTaf(taf);
+        VfrAssessment tafAssessment = flightConditionEvaluator.assessTaf(taf, appSettings);
         section.getChildren().add(createStatusLine(
                 tafAssessment == null ? "Forecast available." : tafAssessment.message(),
                 tafAssessment == null ? VfrStatusLevel.VFR : tafAssessment.level()
@@ -643,7 +789,8 @@ public class MainApp extends Application {
         RouteAssessment assessment = flightConditionEvaluator.assessRoute(
                 latestRouteResults,
                 latestRouteDeparture,
-                latestRouteDestination
+                latestRouteDestination,
+                appSettings
         );
         routeResultsBox.getChildren().add(createBanner(assessment.message(), assessment.level()));
 
@@ -669,7 +816,7 @@ public class MainApp extends Application {
         metrics.setHgap(12);
         metrics.setVgap(12);
         metrics.getChildren().addAll(
-                createMetricCard("Distance", formatOneDecimal(routePlan.distanceNm()) + " nm", ACCENT_BLUE),
+                createMetricCard("Distance", formatDistance(routePlan.distanceNm()), ACCENT_BLUE),
                 createMetricCard("ETE", formatDuration(routePlan.estimatedTimeHours()), SUCCESS_GREEN),
                 createMetricCard("Trip Fuel", formatOneDecimal(routePlan.tripFuelGallons()) + " gal", ACCENT_GOLD),
                 createMetricCard("Reserve Left", formatOneDecimal(routePlan.reserveRemainingGallons()) + " gal",
@@ -688,9 +835,9 @@ public class MainApp extends Application {
                 .orElse(null);
 
         DensityAltitudeAssessment departureDensity = departureWeather == null ? null
-                : densityAltitudeService.assess(departureAirport, departureWeather.metar());
+                : densityAltitudeService.assess(departureAirport, departureWeather.metar(), appSettings);
         DensityAltitudeAssessment destinationDensity = destinationWeather == null ? null
-                : densityAltitudeService.assess(destinationAirport, destinationWeather.metar());
+                : densityAltitudeService.assess(destinationAirport, destinationWeather.metar(), appSettings);
 
         Label note = routePlan.reserveSatisfied()
                 ? createMutedLabel(aircraftProfile.name() + " reserve target is satisfied for a direct route.")
@@ -1070,7 +1217,7 @@ public class MainApp extends Application {
 
     private VfrAssessment assessTafPeriod(TafPeriod period) {
         TafData syntheticTaf = new TafData("TEMP", "", "", "", List.of(period));
-        return flightConditionEvaluator.assessTaf(syntheticTaf);
+        return flightConditionEvaluator.assessTaf(syntheticTaf, appSettings);
     }
 
     private String formatTafPeriod(TafPeriod period, VfrAssessment assessment) {
@@ -1102,6 +1249,20 @@ public class MainApp extends Application {
 
     private String formatOneDecimal(double value) {
         return String.format("%.1f", value);
+    }
+
+    private String formatTemperature(float tempC) {
+        if (appSettings.temperatureUnit() == TemperatureUnit.CELSIUS) {
+            return formatOneDecimal(tempC) + " C";
+        }
+        return formatOneDecimal((tempC * 9 / 5) + 32) + " F";
+    }
+
+    private String formatDistance(double distanceNm) {
+        if (appSettings.distanceUnit() == DistanceUnit.STATUTE_MILES) {
+            return formatOneDecimal(distanceNm * 1.15078) + " mi";
+        }
+        return formatOneDecimal(distanceNm) + " nm";
     }
 
     private <T> void runAsync(CheckedSupplier<T> supplier, Consumer<T> onSuccess, Consumer<Throwable> onError) {

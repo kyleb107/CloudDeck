@@ -1,11 +1,16 @@
 package com.kylebarnes.clouddeck.service;
 
 import com.kylebarnes.clouddeck.model.AirportInfo;
+import com.kylebarnes.clouddeck.model.AppSettings;
 import com.kylebarnes.clouddeck.model.MetarData;
 
 public class DensityAltitudeService {
 
     public DensityAltitudeAssessment assess(AirportInfo airportInfo, MetarData metar) {
+        return assess(airportInfo, metar, AppSettings.defaults());
+    }
+
+    public DensityAltitudeAssessment assess(AirportInfo airportInfo, MetarData metar, AppSettings settings) {
         if (airportInfo == null || metar == null || airportInfo.elevationFt() < 0) {
             return null;
         }
@@ -18,7 +23,7 @@ public class DensityAltitudeService {
                 pressureAltitude + (120.0 * (metar.tempC() - isaTemp))
         );
 
-        if (densityAltitude >= 5000) {
+        if (densityAltitude >= settings.densityAltitudeWarningFt()) {
             return new DensityAltitudeAssessment(
                     pressureAltitude,
                     densityAltitude,
@@ -26,7 +31,7 @@ public class DensityAltitudeService {
                     "High density altitude. Expect degraded climb and takeoff performance."
             );
         }
-        if (densityAltitude >= 3000) {
+        if (densityAltitude >= settings.densityAltitudeCautionFt()) {
             return new DensityAltitudeAssessment(
                     pressureAltitude,
                     densityAltitude,

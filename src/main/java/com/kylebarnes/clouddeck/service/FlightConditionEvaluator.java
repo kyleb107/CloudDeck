@@ -2,6 +2,7 @@ package com.kylebarnes.clouddeck.service;
 
 import com.kylebarnes.clouddeck.model.CloudLayer;
 import com.kylebarnes.clouddeck.model.AirportWeather;
+import com.kylebarnes.clouddeck.model.AppSettings;
 import com.kylebarnes.clouddeck.model.MetarData;
 import com.kylebarnes.clouddeck.model.TafData;
 import com.kylebarnes.clouddeck.model.TafPeriod;
@@ -11,26 +12,34 @@ import java.util.List;
 public class FlightConditionEvaluator {
 
     public VfrAssessment assessVfr(MetarData metar) {
+        return assessVfr(metar, AppSettings.defaults());
+    }
+
+    public VfrAssessment assessVfr(MetarData metar, AppSettings settings) {
         float visibility = metar.visibilitySm();
         int lowestCeiling = lowestCeilingFeet(metar.cloudLayers());
 
-        if (visibility < 3.0f || lowestCeiling < 1000) {
+        if (visibility < settings.vfrWarningVisibilitySm() || lowestCeiling < settings.vfrWarningCeilingFt()) {
             return new VfrAssessment(VfrStatusLevel.WARNING, "WARNING: Below VFR minimums - IFR conditions");
         }
-        if (visibility < 5.0f || lowestCeiling < 3000) {
+        if (visibility < settings.vfrCautionVisibilitySm() || lowestCeiling < settings.vfrCautionCeilingFt()) {
             return new VfrAssessment(VfrStatusLevel.CAUTION, "CAUTION: Marginal VFR conditions");
         }
         return new VfrAssessment(VfrStatusLevel.VFR, "VFR conditions meet minimums");
     }
 
     public VfrAssessment assessTaf(TafData taf) {
+        return assessTaf(taf, AppSettings.defaults());
+    }
+
+    public VfrAssessment assessTaf(TafData taf, AppSettings settings) {
         if (taf == null || taf.periods().isEmpty()) {
             return null;
         }
 
         boolean hasCaution = false;
         for (TafPeriod period : taf.periods()) {
-            VfrStatusLevel level = assessForecastPeriod(period);
+            VfrStatusLevel level = assessForecastPeriod(period, settings);
             if (level == VfrStatusLevel.WARNING) {
                 return new VfrAssessment(VfrStatusLevel.WARNING, "TAF includes below-VFR periods");
             }
@@ -46,6 +55,10 @@ public class FlightConditionEvaluator {
     }
 
     public RouteAssessment assessRoute(List<AirportWeather> airportWeather, String departureId, String destinationId) {
+        return assessRoute(airportWeather, departureId, destinationId, AppSettings.defaults());
+    }
+
+    public RouteAssessment assessRoute(List<AirportWeather> airportWeather, String departureId, String destinationId, AppSettings settings) {
         AirportWeather departure = airportWeather.stream()
                 .filter(weather -> weather.metar().airportId().equalsIgnoreCase(departureId))
                 .findFirst()
@@ -55,8 +68,8 @@ public class FlightConditionEvaluator {
                 .findFirst()
                 .orElse(null);
 
-        AirportOutlook departureOutlook = assessAirportOutlook(departure);
-        AirportOutlook destinationOutlook = assessAirportOutlook(destination);
+        AirportOutlook departureOutlook = assessAirportOutlook(departure, settings);
+        AirportOutlook destinationOutlook = assessAirportOutlook(destination, settings);
 
         if (departureOutlook.level() == VfrStatusLevel.WARNING && destinationOutlook.level() == VfrStatusLevel.WARNING) {
             return new RouteAssessment(
@@ -102,25 +115,25 @@ public class FlightConditionEvaluator {
         );
     }
 
-    private AirportOutlook assessAirportOutlook(AirportWeather airportWeather) {
+    private AirportOutlook assessAirportOutlook(AirportWeather airportWeather, AppSettings settings) {
         if (airportWeather == null) {
             return new AirportOutlook(VfrStatusLevel.WARNING);
         }
 
-        VfrStatusLevel currentLevel = assessVfr(airportWeather.metar()).level();
-        VfrAssessment tafAssessment = assessTaf(airportWeather.taf());
+        VfrStatusLevel currentLevel = assessVfr(airportWeather.metar(), settings).level();
+        VfrAssessment tafAssessment = assessTaf(airportWeather.taf(), settings);
         VfrStatusLevel forecastLevel = tafAssessment == null ? VfrStatusLevel.VFR : tafAssessment.level();
         return new AirportOutlook(worstLevel(currentLevel, forecastLevel));
     }
 
-    private VfrStatusLevel assessForecastPeriod(TafPeriod period) {
+    private VfrStatusLevel assessForecastPeriod(TafPeriod period, AppSettings settings) {
         float visibility = period.visibilitySm() == null ? Float.MAX_VALUE : period.visibilitySm();
         int lowestCeiling = lowestCeilingFeet(period.cloudLayers());
 
-        if (visibility < 3.0f || lowestCeiling < 1000) {
+        if (visibility < settings.vfrWarningVisibilitySm() || lowestCeiling < settings.vfrWarningCeilingFt()) {
             return VfrStatusLevel.WARNING;
         }
-        if (visibility < 5.0f || lowestCeiling < 3000) {
+        if (visibility < settings.vfrCautionVisibilitySm() || lowestCeiling < settings.vfrCautionCeilingFt()) {
             return VfrStatusLevel.CAUTION;
         }
         return VfrStatusLevel.VFR;
