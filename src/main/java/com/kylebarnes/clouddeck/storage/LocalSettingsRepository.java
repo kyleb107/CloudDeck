@@ -1,9 +1,12 @@
 package com.kylebarnes.clouddeck.storage;
 
 import com.kylebarnes.clouddeck.model.AppSettings;
+import com.kylebarnes.clouddeck.model.AltimeterUnit;
 import com.kylebarnes.clouddeck.model.DistanceUnit;
 import com.kylebarnes.clouddeck.model.TemperatureUnit;
+import com.kylebarnes.clouddeck.model.TimeDisplayMode;
 import com.kylebarnes.clouddeck.model.ThemePreset;
+import com.kylebarnes.clouddeck.model.WindUnit;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -36,6 +39,9 @@ public class LocalSettingsRepository implements SettingsRepository {
                     parseThemePreset(properties.getProperty("themePreset"), defaults.themePreset()),
                     parseTemperatureUnit(properties.getProperty("temperatureUnit"), defaults.temperatureUnit()),
                     parseDistanceUnit(properties.getProperty("distanceUnit"), defaults.distanceUnit()),
+                    parseWindUnit(properties.getProperty("windUnit"), defaults.windUnit()),
+                    parseAltimeterUnit(properties.getProperty("altimeterUnit"), defaults.altimeterUnit()),
+                    parseTimeDisplayMode(properties.getProperty("timeDisplayMode"), defaults.timeDisplayMode()),
                     parseDouble(properties.getProperty("taxiFuelGallons"), defaults.taxiFuelGallons()),
                     parseDouble(properties.getProperty("climbFuelGallons"), defaults.climbFuelGallons()),
                     parseInt(properties.getProperty("groundspeedAdjustmentKts"), defaults.groundspeedAdjustmentKts()),
@@ -60,6 +66,9 @@ public class LocalSettingsRepository implements SettingsRepository {
         properties.setProperty("themePreset", settings.themePreset().name());
         properties.setProperty("temperatureUnit", settings.temperatureUnit().name());
         properties.setProperty("distanceUnit", settings.distanceUnit().name());
+        properties.setProperty("windUnit", settings.windUnit().name());
+        properties.setProperty("altimeterUnit", settings.altimeterUnit().name());
+        properties.setProperty("timeDisplayMode", settings.timeDisplayMode().name());
         properties.setProperty("taxiFuelGallons", String.valueOf(settings.taxiFuelGallons()));
         properties.setProperty("climbFuelGallons", String.valueOf(settings.climbFuelGallons()));
         properties.setProperty("groundspeedAdjustmentKts", String.valueOf(settings.groundspeedAdjustmentKts()));
@@ -99,6 +108,30 @@ public class LocalSettingsRepository implements SettingsRepository {
     private DistanceUnit parseDistanceUnit(String rawValue, DistanceUnit fallback) {
         try {
             return rawValue == null ? fallback : DistanceUnit.valueOf(rawValue.trim().toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            return fallback;
+        }
+    }
+
+    private WindUnit parseWindUnit(String rawValue, WindUnit fallback) {
+        try {
+            return rawValue == null ? fallback : WindUnit.valueOf(rawValue.trim().toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            return fallback;
+        }
+    }
+
+    private AltimeterUnit parseAltimeterUnit(String rawValue, AltimeterUnit fallback) {
+        try {
+            return rawValue == null ? fallback : AltimeterUnit.valueOf(rawValue.trim().toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            return fallback;
+        }
+    }
+
+    private TimeDisplayMode parseTimeDisplayMode(String rawValue, TimeDisplayMode fallback) {
+        try {
+            return rawValue == null ? fallback : TimeDisplayMode.valueOf(rawValue.trim().toUpperCase());
         } catch (IllegalArgumentException exception) {
             return fallback;
         }

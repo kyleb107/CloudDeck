@@ -22,8 +22,11 @@ import com.kylebarnes.clouddeck.model.SolarTimes;
 import com.kylebarnes.clouddeck.model.TafData;
 import com.kylebarnes.clouddeck.model.TafPeriod;
 import com.kylebarnes.clouddeck.model.TemperatureUnit;
+import com.kylebarnes.clouddeck.model.TimeDisplayMode;
 import com.kylebarnes.clouddeck.model.ThemePreset;
 import com.kylebarnes.clouddeck.model.TimedRouteAssessment;
+import com.kylebarnes.clouddeck.model.AltimeterUnit;
+import com.kylebarnes.clouddeck.model.WindUnit;
 import com.kylebarnes.clouddeck.service.CrosswindCalculator;
 import com.kylebarnes.clouddeck.service.DensityAltitudeAssessment;
 import com.kylebarnes.clouddeck.service.DensityAltitudeService;
@@ -93,7 +96,9 @@ import java.util.function.Consumer;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.nio.file.Path;
@@ -459,7 +464,7 @@ public class MainApp extends Application {
         );
         VBox recentRoutesCard = createPanel(
                 "Recent Routes",
-                "Reuse recent route checks with their saved UTC departure time.",
+                "Reuse recent route checks with their saved UTC departure time and your preferred display format.",
                 recentRoutesBox
         );
 
@@ -480,6 +485,7 @@ public class MainApp extends Application {
     private ScrollPane buildSettingsTab(Stage stage) {
         Label sectionTitle = createSectionTitle("Settings");
         Label sectionSubtitle = createSectionSubtitle("Define defaults and thresholds that future planning features can reuse.");
+        AppSettings defaultSettings = AppSettings.defaults();
 
         TextField homeAirportField = createInputField("Home airport ICAO", 220);
         homeAirportField.setText(appSettings.homeAirport());
@@ -499,6 +505,21 @@ public class MainApp extends Application {
         distanceUnitBox.getItems().setAll(DistanceUnit.values());
         distanceUnitBox.setValue(appSettings.distanceUnit());
         distanceUnitBox.setPrefWidth(220);
+
+        ComboBox<WindUnit> windUnitBox = new ComboBox<>();
+        windUnitBox.getItems().setAll(WindUnit.values());
+        windUnitBox.setValue(appSettings.windUnit());
+        windUnitBox.setPrefWidth(220);
+
+        ComboBox<AltimeterUnit> altimeterUnitBox = new ComboBox<>();
+        altimeterUnitBox.getItems().setAll(AltimeterUnit.values());
+        altimeterUnitBox.setValue(appSettings.altimeterUnit());
+        altimeterUnitBox.setPrefWidth(220);
+
+        ComboBox<TimeDisplayMode> timeDisplayModeBox = new ComboBox<>();
+        timeDisplayModeBox.getItems().setAll(TimeDisplayMode.values());
+        timeDisplayModeBox.setValue(appSettings.timeDisplayMode());
+        timeDisplayModeBox.setPrefWidth(220);
 
         ComboBox<AircraftProfile> defaultAircraftBox = new ComboBox<>();
         defaultAircraftBox.getItems().setAll(aircraftProfileRepository.loadProfiles());
@@ -533,7 +554,36 @@ public class MainApp extends Application {
         groundspeedAdjustmentField.setText(String.valueOf(appSettings.groundspeedAdjustmentKts()));
 
         Label settingsStatus = createMutedLabel(settingsStatusMessage);
+        Button resetDefaultsButton = createGhostButton("Reset to Defaults");
         Button saveSettingsButton = createPrimaryButton("Save Settings");
+        resetDefaultsButton.setOnAction(event -> {
+            homeAirportField.setText(defaultSettings.homeAirport());
+            themePresetBox.setValue(defaultSettings.themePreset());
+            temperatureUnitBox.setValue(defaultSettings.temperatureUnit());
+            distanceUnitBox.setValue(defaultSettings.distanceUnit());
+            windUnitBox.setValue(defaultSettings.windUnit());
+            altimeterUnitBox.setValue(defaultSettings.altimeterUnit());
+            timeDisplayModeBox.setValue(defaultSettings.timeDisplayMode());
+
+            AircraftProfile defaultProfile = defaultAircraftBox.getItems().stream()
+                    .filter(profile -> profile.name().equalsIgnoreCase(defaultSettings.defaultAircraftName()))
+                    .findFirst()
+                    .orElse(defaultAircraftBox.getItems().isEmpty() ? null : defaultAircraftBox.getItems().getFirst());
+            defaultAircraftBox.setValue(defaultProfile);
+
+            warningVisibilityField.setText(String.valueOf(defaultSettings.vfrWarningVisibilitySm()));
+            warningCeilingField.setText(String.valueOf(defaultSettings.vfrWarningCeilingFt()));
+            cautionVisibilityField.setText(String.valueOf(defaultSettings.vfrCautionVisibilitySm()));
+            cautionCeilingField.setText(String.valueOf(defaultSettings.vfrCautionCeilingFt()));
+            densityCautionField.setText(String.valueOf(defaultSettings.densityAltitudeCautionFt()));
+            densityWarningField.setText(String.valueOf(defaultSettings.densityAltitudeWarningFt()));
+            taxiFuelField.setText(formatOneDecimal(defaultSettings.taxiFuelGallons()));
+            climbFuelField.setText(formatOneDecimal(defaultSettings.climbFuelGallons()));
+            groundspeedAdjustmentField.setText(String.valueOf(defaultSettings.groundspeedAdjustmentKts()));
+
+            settingsStatusMessage = "";
+            settingsStatus.setText("Defaults restored in the form. Click Save Settings to apply them.");
+        });
         saveSettingsButton.setOnAction(event -> {
             try {
                 AircraftProfile defaultProfile = defaultAircraftBox.getValue();
@@ -547,6 +597,9 @@ public class MainApp extends Application {
                         themePresetBox.getValue(),
                         temperatureUnitBox.getValue(),
                         distanceUnitBox.getValue(),
+                        windUnitBox.getValue(),
+                        altimeterUnitBox.getValue(),
+                        timeDisplayModeBox.getValue(),
                         Double.parseDouble(taxiFuelField.getText().trim()),
                         Double.parseDouble(climbFuelField.getText().trim()),
                         Integer.parseInt(groundspeedAdjustmentField.getText().trim()),
@@ -584,6 +637,12 @@ public class MainApp extends Application {
         defaultsGrid.add(temperatureUnitBox, 1, 3);
         defaultsGrid.add(formLabel("Distance Unit"), 0, 4);
         defaultsGrid.add(distanceUnitBox, 1, 4);
+        defaultsGrid.add(formLabel("Wind Unit"), 0, 5);
+        defaultsGrid.add(windUnitBox, 1, 5);
+        defaultsGrid.add(formLabel("Altimeter Unit"), 0, 6);
+        defaultsGrid.add(altimeterUnitBox, 1, 6);
+        defaultsGrid.add(formLabel("Time Display"), 0, 7);
+        defaultsGrid.add(timeDisplayModeBox, 1, 7);
 
         GridPane thresholdsGrid = new GridPane();
         thresholdsGrid.setHgap(14);
@@ -627,7 +686,10 @@ public class MainApp extends Application {
                 planningGrid
         );
 
-        VBox content = new VBox(16, sectionTitle, sectionSubtitle, defaultsCard, thresholdsCard, planningCard, saveSettingsButton, settingsStatus);
+        HBox settingsActions = new HBox(10, resetDefaultsButton, saveSettingsButton);
+        settingsActions.setAlignment(Pos.CENTER_LEFT);
+
+        VBox content = new VBox(16, sectionTitle, sectionSubtitle, defaultsCard, thresholdsCard, planningCard, settingsActions, settingsStatus);
         content.setPadding(new Insets(24));
 
         ScrollPane scrollPane = new ScrollPane(content);
@@ -759,7 +821,7 @@ public class MainApp extends Application {
         Label categoryBadge = createBadge(metar.flightCategory(), categoryColor);
         Label profileBadge = selectedProfile == null
                 ? createBadge("No aircraft selected", themePalette.unknownGray())
-                : createBadge("Aircraft XW limit " + formatOneDecimal(selectedProfile.maxCrosswindKts()) + " kt", themePalette.accentGold());
+                : createBadge("Aircraft XW limit " + formatSpeed(selectedProfile.maxCrosswindKts()), themePalette.accentGold());
 
         HBox badges = new HBox(8, categoryBadge, profileBadge);
         badges.setAlignment(Pos.CENTER_LEFT);
@@ -781,10 +843,10 @@ public class MainApp extends Application {
         metricStrip.setVgap(10);
         metricStrip.getChildren().addAll(
                 createMetricCard("Wind", metar.windGust() > 0
-                        ? String.format("%03d deg @ %dG%d kt", metar.windDir(), metar.windSpeed(), metar.windGust())
-                        : String.format("%03d deg @ %d kt", metar.windDir(), metar.windSpeed()), categoryColor),
-                createMetricCard("Visibility", String.format("%.1f SM", metar.visibilitySm()), themePalette.accentBlue()),
-                createMetricCard("Altimeter", String.format("%.2f inHg", metar.altimeterInHg()), themePalette.accentGold()),
+                        ? formatWind(metar.windDir(), metar.windSpeed(), metar.windGust())
+                        : formatWind(metar.windDir(), metar.windSpeed(), 0), categoryColor),
+                createMetricCard("Visibility", formatVisibility(metar.visibilitySm()), themePalette.accentBlue()),
+                createMetricCard("Altimeter", formatAltimeter(metar.altimeterInHg()), themePalette.accentGold()),
                 createMetricCard("Temperature", formatTemperature(metar.tempC()), themePalette.successGreen())
         );
 
@@ -792,7 +854,7 @@ public class MainApp extends Application {
         Label vfrLabel = createStatusLine(vfrAssessment.message(), vfrAssessment.level());
 
         Label detailsLabel = makeInfoLabel(
-                "Clouds: " + metar.cloudLayersSummary() + "  |  Observation: " + metar.observationTime().replace("T", " ").replace(".000Z", "Z")
+                "Clouds: " + metar.cloudLayersSummary() + "  |  Observation: " + formatObservationTime(metar.observationTime())
         );
 
         VBox airportBriefingSection = buildAirportBriefingSection(airportInfo, metar);
@@ -913,9 +975,9 @@ public class MainApp extends Application {
         VBox recentBox = new VBox(4);
         for (MetarData observation : trendSummary.recentObservations()) {
             Label line = createMutedLabel(
-                    observation.observationTime().replace("T", " ").replace(".000Z", "Z")
+                    formatObservationTime(observation.observationTime())
                             + "  |  " + observation.flightCategory()
-                            + "  |  Vis " + formatOneDecimal(observation.visibilitySm()) + " SM"
+                            + "  |  Vis " + formatVisibility(observation.visibilitySm())
             );
             recentBox.getChildren().add(line);
         }
@@ -1065,18 +1127,18 @@ public class MainApp extends Application {
 
         for (RunwayAnalysis analysis : runwayAnalysisService.analyze(metar, runways, aircraftProfile)) {
             String headwindLabel = analysis.components().headwindKts() >= 0
-                    ? String.format("HW %.1f", analysis.components().headwindKts())
-                    : String.format("TW %.1f", Math.abs(analysis.components().headwindKts()));
-            String crosswindLabel = String.format("XW %.1f %s",
-                    Math.abs(analysis.components().crosswindKts()),
-                    analysis.components().crosswindKts() >= 0 ? "R" : "L");
+                    ? "HW " + formatSpeedValue(analysis.components().headwindKts())
+                    : "TW " + formatSpeedValue(Math.abs(analysis.components().headwindKts()));
+            String crosswindLabel = "XW " + formatSpeedValue(Math.abs(analysis.components().crosswindKts())) + " "
+                    + speedUnitShortLabel() + " "
+                    + (analysis.components().crosswindKts() >= 0 ? "R" : "L");
 
             String text = analysis.bestOption()
                     ? "Best runway " + analysis.runway().ident() + "  |  " + headwindLabel + "  |  " + crosswindLabel
                     : "Runway " + analysis.runway().ident() + "  |  " + headwindLabel + "  |  " + crosswindLabel;
 
             if (analysis.exceedsAircraftLimit() && aircraftProfile != null) {
-                text += "  |  Above " + formatOneDecimal(aircraftProfile.maxCrosswindKts()) + " kt limit";
+                text += "  |  Above " + formatSpeed(aircraftProfile.maxCrosswindKts()) + " limit";
             }
 
             Label runwayLabel = new Label(text);
@@ -1302,7 +1364,7 @@ public class MainApp extends Application {
 
         HBox badges = new HBox(8, createBadge(metar.flightCategory(), categoryColor(metar.flightCategory())));
         if (selectedProfile != null) {
-            badges.getChildren().add(createBadge("XW " + formatOneDecimal(selectedProfile.maxCrosswindKts()) + " kt", themePalette.accentGold()));
+            badges.getChildren().add(createBadge("XW " + formatSpeed(selectedProfile.maxCrosswindKts()), themePalette.accentGold()));
         }
 
         FlowPane metrics = new FlowPane();
@@ -1310,10 +1372,10 @@ public class MainApp extends Application {
         metrics.setVgap(10);
         metrics.getChildren().addAll(
                 createMetricCard("Wind", metar.windGust() > 0
-                        ? String.format("%03d/%dG%d", metar.windDir(), metar.windSpeed(), metar.windGust())
-                        : String.format("%03d/%d", metar.windDir(), metar.windSpeed()), categoryColor(metar.flightCategory())),
-                createMetricCard("Vis", String.format("%.1f SM", metar.visibilitySm()), themePalette.accentBlue()),
-                createMetricCard("Alt", String.format("%.2f", metar.altimeterInHg()), themePalette.accentGold()),
+                        ? formatCompactWind(metar.windDir(), metar.windSpeed(), metar.windGust())
+                        : formatCompactWind(metar.windDir(), metar.windSpeed(), 0), categoryColor(metar.flightCategory())),
+                createMetricCard("Vis", formatVisibility(metar.visibilitySm()), themePalette.accentBlue()),
+                createMetricCard("Alt", formatAltimeter(metar.altimeterInHg()), themePalette.accentGold()),
                 createMetricCard("Temp", formatTemperature(metar.tempC()), themePalette.successGreen())
         );
 
@@ -1356,8 +1418,7 @@ public class MainApp extends Application {
                 RunwayAnalysis best = runwayAnalysis.getFirst();
                 runwayLine = "Best runway " + best.runway().ident()
                         + " with crosswind "
-                        + formatOneDecimal(Math.abs(best.components().crosswindKts()))
-                        + " kt";
+                        + formatSpeed(Math.abs(best.components().crosswindKts()));
                 if (best.exceedsAircraftLimit() && selectedAircraft != null) {
                     runwayLine += " (above selected aircraft limit)";
                 }
@@ -1492,7 +1553,7 @@ public class MainApp extends Application {
         metrics.setVgap(12);
         metrics.getChildren().addAll(
                 createMetricCard("Distance", formatDistance(routePlan.distanceNm()), themePalette.accentBlue()),
-                createMetricCard("Groundspeed", formatOneDecimal(routePlan.groundspeedKts()) + " kt", themePalette.cautionOrange()),
+                createMetricCard("Groundspeed", formatSpeed(routePlan.groundspeedKts()), themePalette.cautionOrange()),
                 createMetricCard("ETE", formatDuration(routePlan.estimatedTimeHours()), themePalette.successGreen()),
                 createMetricCard("Trip Fuel", formatOneDecimal(routePlan.tripFuelGallons()) + " gal", themePalette.accentGold()),
                 createMetricCard("Reserve Left", formatOneDecimal(routePlan.reserveRemainingGallons()) + " gal",
@@ -1525,9 +1586,9 @@ public class MainApp extends Application {
                 ? null
                 : departureTimeUtc.plusMinutes((long) Math.round(routePlan.estimatedTimeHours() * 60));
         if (departureTimeUtc != null && arrivalTimeUtc != null) {
-            metrics.getChildren().add(createMetricCard("Departure UTC", departureTimeUtc.format(ROUTE_TIME_FORMATTER), themePalette.accentGold()));
-            metrics.getChildren().add(createMetricCard("Arrival UTC",
-                    arrivalTimeUtc.format(ROUTE_TIME_FORMATTER),
+            metrics.getChildren().add(createMetricCard("Departure " + timeDisplayShortLabel(), formatDateTime(departureTimeUtc), themePalette.accentGold()));
+            metrics.getChildren().add(createMetricCard("Arrival " + timeDisplayShortLabel(),
+                    formatDateTime(arrivalTimeUtc),
                     themePalette.accentBlue()));
         }
 
@@ -1549,9 +1610,8 @@ public class MainApp extends Application {
                         + formatOneDecimal(routePlan.airborneFuelGallons()) + " gal."
         ));
         densityBox.getChildren().add(createMutedLabel(
-                "Groundspeed uses aircraft cruise " + formatOneDecimal(aircraftProfile.cruiseSpeedKts()) + " kt with "
-                        + (appSettings.groundspeedAdjustmentKts() >= 0 ? "+" : "")
-                        + appSettings.groundspeedAdjustmentKts() + " kt adjustment."
+                "Groundspeed uses aircraft cruise " + formatSpeed(aircraftProfile.cruiseSpeedKts()) + " with "
+                        + formatSignedSpeed(appSettings.groundspeedAdjustmentKts()) + " adjustment."
         ));
 
         if (departureTimeUtc != null && arrivalTimeUtc != null) {
@@ -1609,7 +1669,8 @@ public class MainApp extends Application {
             routeLabel.setMaxWidth(Double.MAX_VALUE);
 
             String timestamp = "Saved departure " + entry.plannedDepartureUtc().format(ROUTE_TIME_FORMATTER)
-                    + " UTC  |  Last used " + entry.lastUsedUtc().format(ROUTE_TIME_FORMATTER) + " UTC";
+                    + " UTC  |  Display " + formatDateTime(entry.plannedDepartureUtc())
+                    + "  |  Last used " + formatDateTime(entry.lastUsedUtc());
             Label metaLabel = createMutedLabel(timestamp);
 
             Button useButton = createSecondaryButton("Run Saved Route");
@@ -1867,21 +1928,21 @@ public class MainApp extends Application {
             return;
         }
 
-        aircraftHeroSummary.setText(selectedProfile.name() + "  |  Cruise " + formatOneDecimal(selectedProfile.cruiseSpeedKts()) + " kt");
+        aircraftHeroSummary.setText(selectedProfile.name() + "  |  Cruise " + formatSpeed(selectedProfile.cruiseSpeedKts()));
         aircraftHeroNote.setText(
                 "Fuel burn " + formatOneDecimal(selectedProfile.fuelBurnGph()) + " gph, usable fuel "
                         + formatOneDecimal(selectedProfile.usableFuelGallons()) + " gal, max crosswind "
-                        + formatOneDecimal(selectedProfile.maxCrosswindKts()) + " kt."
+                        + formatSpeed(selectedProfile.maxCrosswindKts()) + "."
         );
 
         FlowPane metrics = new FlowPane();
         metrics.setHgap(10);
         metrics.setVgap(10);
         metrics.getChildren().addAll(
-                createMetricCard("Cruise", formatOneDecimal(selectedProfile.cruiseSpeedKts()) + " kt", themePalette.accentBlue()),
+                createMetricCard("Cruise", formatSpeed(selectedProfile.cruiseSpeedKts()), themePalette.accentBlue()),
                 createMetricCard("Burn", formatOneDecimal(selectedProfile.fuelBurnGph()) + " gph", themePalette.accentGold()),
                 createMetricCard("Usable Fuel", formatOneDecimal(selectedProfile.usableFuelGallons()) + " gal", themePalette.successGreen()),
-                createMetricCard("Crosswind", formatOneDecimal(selectedProfile.maxCrosswindKts()) + " kt", themePalette.cautionOrange())
+                createMetricCard("Crosswind", formatSpeed(selectedProfile.maxCrosswindKts()), themePalette.cautionOrange())
         );
 
         Label notesLabel = createMutedLabel(selectedProfile.notes().isBlank()
@@ -2128,7 +2189,7 @@ public class MainApp extends Application {
         builder.append(period.label()).append(": ").append(assessment == null ? "Forecast available" : assessment.level());
 
         if (period.visibilitySm() != null) {
-            builder.append(" | Vis ").append(formatOneDecimal(period.visibilitySm())).append(" SM");
+            builder.append(" | Vis ").append(formatVisibility(period.visibilitySm()));
         }
         if (!period.cloudLayers().isEmpty()) {
             builder.append(" | ").append(period.cloudLayersSummary());
@@ -2179,6 +2240,10 @@ public class MainApp extends Application {
         return formatOneDecimal((tempC * 9 / 5) + 32) + " F";
     }
 
+    private String formatVisibility(float visibilitySm) {
+        return formatOneDecimal(visibilitySm) + " SM";
+    }
+
     private String formatDistance(double distanceNm) {
         if (appSettings.distanceUnit() == DistanceUnit.STATUTE_MILES) {
             return formatOneDecimal(distanceNm * 1.15078) + " mi";
@@ -2186,21 +2251,99 @@ public class MainApp extends Application {
         return formatOneDecimal(distanceNm) + " nm";
     }
 
+    private String formatSpeed(double speedKts) {
+        return formatSpeedValue(speedKts) + " " + speedUnitShortLabel();
+    }
+
+    private String formatSignedSpeed(double speedKts) {
+        return (speedKts >= 0 ? "+" : "-") + formatSpeed(Math.abs(speedKts));
+    }
+
+    private String formatSpeedValue(double speedKts) {
+        double convertedSpeed = switch (appSettings.windUnit()) {
+            case KNOTS -> speedKts;
+            case MILES_PER_HOUR -> speedKts * 1.15078;
+            case KILOMETERS_PER_HOUR -> speedKts * 1.852;
+        };
+        return formatOneDecimal(convertedSpeed);
+    }
+
+    private String speedUnitShortLabel() {
+        return switch (appSettings.windUnit()) {
+            case KNOTS -> "kt";
+            case MILES_PER_HOUR -> "mph";
+            case KILOMETERS_PER_HOUR -> "km/h";
+        };
+    }
+
+    private String formatWind(int direction, int speedKts, int gustKts) {
+        return gustKts > 0
+                ? String.format("%03d deg @ %sG%s %s", direction, formatSpeedValue(speedKts), formatSpeedValue(gustKts), speedUnitShortLabel())
+                : String.format("%03d deg @ %s %s", direction, formatSpeedValue(speedKts), speedUnitShortLabel());
+    }
+
+    private String formatCompactWind(int direction, int speedKts, int gustKts) {
+        return gustKts > 0
+                ? String.format("%03d/%sG%s %s", direction, formatSpeedValue(speedKts), formatSpeedValue(gustKts), speedUnitShortLabel())
+                : String.format("%03d/%s %s", direction, formatSpeedValue(speedKts), speedUnitShortLabel());
+    }
+
+    private String formatAltimeter(float altimeterInHg) {
+        if (appSettings.altimeterUnit() == AltimeterUnit.HPA) {
+            return Math.round(altimeterInHg * 33.8639f) + " hPa";
+        }
+        return String.format("%.2f inHg", altimeterInHg);
+    }
+
+    private String formatDateTime(LocalDateTime timeUtc) {
+        if (timeUtc == null) {
+            return "";
+        }
+        if (appSettings.timeDisplayMode() == TimeDisplayMode.UTC) {
+            return timeUtc.format(ROUTE_TIME_FORMATTER) + " UTC";
+        }
+        ZonedDateTime localTime = timeUtc.atOffset(ZoneOffset.UTC).atZoneSameInstant(ZoneId.systemDefault());
+        return localTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm z"));
+    }
+
+    private String formatClockTime(LocalDateTime timeUtc) {
+        if (timeUtc == null) {
+            return "";
+        }
+        if (appSettings.timeDisplayMode() == TimeDisplayMode.UTC) {
+            return timeUtc.toLocalTime().format(CLOCK_FORMATTER) + " UTC";
+        }
+        ZonedDateTime localTime = timeUtc.atOffset(ZoneOffset.UTC).atZoneSameInstant(ZoneId.systemDefault());
+        return localTime.format(DateTimeFormatter.ofPattern("HH:mm z"));
+    }
+
+    private String formatObservationTime(String observationTime) {
+        LocalDateTime observationTimeUtc = extractUtcDateTime(observationTime);
+        if (observationTimeUtc == null) {
+            return observationTime == null ? "" : observationTime.replace("T", " ").replace(".000Z", "Z");
+        }
+        return formatDateTime(observationTimeUtc);
+    }
+
+    private String timeDisplayShortLabel() {
+        return appSettings.timeDisplayMode() == TimeDisplayMode.UTC ? "UTC" : "Local";
+    }
+
     private String formatSolarSummary(SolarTimes solarTimes) {
         if (solarTimes.allDaylight()) {
-            return "Sun above horizon all day on " + solarTimes.dateUtc() + " UTC";
+            return "Sun above horizon all day on " + solarTimes.dateUtc() + " " + timeDisplayShortLabel();
         }
         if (solarTimes.allNight()) {
-            return "Sun below horizon all day on " + solarTimes.dateUtc() + " UTC";
+            return "Sun below horizon all day on " + solarTimes.dateUtc() + " " + timeDisplayShortLabel();
         }
-        return "Sunrise " + solarTimes.sunriseUtc().toLocalTime().format(CLOCK_FORMATTER)
-                + " UTC  |  Sunset " + solarTimes.sunsetUtc().toLocalTime().format(CLOCK_FORMATTER) + " UTC";
+        return "Sunrise " + formatClockTime(solarTimes.sunriseUtc())
+                + "  |  Sunset " + formatClockTime(solarTimes.sunsetUtc());
     }
 
     private String formatSolarPlanningLine(String airportId, String phase, SolarTimes solarTimes, LocalDateTime timeUtc) {
         String condition = solarCalculatorService.isDaylight(solarTimes, timeUtc) ? "daylight" : "night";
-        return airportId + " " + phase + " at " + timeUtc.toLocalTime().format(CLOCK_FORMATTER)
-                + " UTC is in " + condition + "  |  " + formatSolarSummary(solarTimes);
+        return airportId + " " + phase + " at " + formatClockTime(timeUtc)
+                + " is in " + condition + "  |  " + formatSolarSummary(solarTimes);
     }
 
     private LocalDateTime extractUtcDateTime(String observationTime) {
