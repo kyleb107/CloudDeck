@@ -33,6 +33,8 @@ import com.kylebarnes.clouddeck.service.BriefingExportService;
 import com.kylebarnes.clouddeck.service.FaaChartLinkService;
 import com.kylebarnes.clouddeck.service.FlightConditionEvaluator;
 import com.kylebarnes.clouddeck.service.FlightPlanningService;
+import com.kylebarnes.clouddeck.service.MetarTrendService;
+import com.kylebarnes.clouddeck.service.MetarTrendSummary;
 import com.kylebarnes.clouddeck.service.OperationalAlert;
 import com.kylebarnes.clouddeck.service.OperationalAlertService;
 import com.kylebarnes.clouddeck.service.RouteAssessment;
@@ -116,6 +118,7 @@ public class MainApp extends Application {
     private final BriefingExportService briefingExportService = new BriefingExportService();
     private final FaaChartLinkService faaChartLinkService = new FaaChartLinkService();
     private final AirportDiagramService airportDiagramService = new AirportDiagramService();
+    private final MetarTrendService metarTrendService = new MetarTrendService();
     private final OperationalAlertService operationalAlertService = new OperationalAlertService();
     private final DensityAltitudeService densityAltitudeService = new DensityAltitudeService();
     private final AlternateAirportService alternateAirportService = new AlternateAirportService(
@@ -786,6 +789,7 @@ public class MainApp extends Application {
         );
 
         VBox airportBriefingSection = buildAirportBriefingSection(airportInfo, metar);
+        VBox trendSection = buildTrendSection(airportWeather.metarHistory());
         VBox tafSection = buildTafSection(airportWeather.taf());
         VBox runwaySection = buildRunwaySection(metar, airportWeather.runways(), categoryColor, selectedProfile);
 
@@ -793,7 +797,7 @@ public class MainApp extends Application {
         rawLabel.setStyle("-fx-text-fill: #7f95ab; -fx-font-family: 'Courier New'; -fx-font-size: 11px;");
         rawLabel.setWrapText(true);
 
-        card.getChildren().addAll(header, nameLabel, metricStrip, vfrLabel, detailsLabel, airportBriefingSection, tafSection, runwaySection, rawLabel);
+        card.getChildren().addAll(header, nameLabel, metricStrip, vfrLabel, detailsLabel, airportBriefingSection, trendSection, tafSection, runwaySection, rawLabel);
         return card;
     }
 
@@ -865,6 +869,35 @@ public class MainApp extends Application {
         );
         chartBox.getChildren().addAll(actions, hint);
         return chartBox;
+    }
+
+    private VBox buildTrendSection(List<MetarData> history) {
+        VBox section = new VBox(6);
+        section.getChildren().add(new Separator());
+        section.getChildren().add(createSubsectionTitle("Trend Snapshot"));
+
+        MetarTrendSummary trendSummary = metarTrendService.summarize(history, appSettings);
+        if (trendSummary == null) {
+            section.getChildren().add(createMutedLabel("Not enough METAR history yet for a trend view."));
+            return section;
+        }
+
+        section.getChildren().add(createStatusLine(trendSummary.headline(), trendSummary.level()));
+        section.getChildren().add(createMutedLabel(trendSummary.categorySummary()));
+        section.getChildren().add(createMutedLabel(trendSummary.visibilitySummary()));
+        section.getChildren().add(createMutedLabel(trendSummary.ceilingSummary()));
+
+        VBox recentBox = new VBox(4);
+        for (MetarData observation : trendSummary.recentObservations()) {
+            Label line = createMutedLabel(
+                    observation.observationTime().replace("T", " ").replace(".000Z", "Z")
+                            + "  |  " + observation.flightCategory()
+                            + "  |  Vis " + formatOneDecimal(observation.visibilitySm()) + " SM"
+            );
+            recentBox.getChildren().add(line);
+        }
+        section.getChildren().add(recentBox);
+        return section;
     }
 
     private VBox buildAirportDiagramPreviewBox(String airportId) {
@@ -1248,6 +1281,7 @@ public class MainApp extends Application {
         VBox sections = new VBox(
                 10,
                 buildAirportBriefingSection(airportWeather.airportInfo(), metar),
+                buildTrendSection(airportWeather.metarHistory()),
                 buildTafSection(airportWeather.taf()),
                 buildRunwaySection(metar, airportWeather.runways(), categoryColor(metar.flightCategory()), selectedProfile)
         );

@@ -13,6 +13,8 @@ import org.json.JSONArray;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -66,9 +68,8 @@ public class WeatherService {
             throw new Exception("No METAR data returned for: " + String.join(", ", missingIds));
         }
 
-        Map<String, TafData> tafByAirport = tafParser.parseMany(
-                tafClient.fetchRawTafs(String.join(",", airportIds))
-        );
+        Map<String, TafData> tafByAirport = fetchTafsSafely(airportIds);
+        Map<String, List<MetarData>> historyByAirport = fetchHistorySafely(airportIds, 12);
 
         metars.sort((left, right) ->
                 Integer.compare(airportIds.indexOf(left.airportId()), airportIds.indexOf(right.airportId()))
@@ -81,7 +82,8 @@ public class WeatherService {
                     airportInfo,
                     metar,
                     tafByAirport.get(metar.airportId()),
-                    airportsRepository.findRunways(metar.airportId())
+                    airportsRepository.findRunways(metar.airportId()),
+                    historyByAirport.getOrDefault(metar.airportId(), List.of())
             ));
         }
         return airportWeather;
@@ -99,5 +101,34 @@ public class WeatherService {
                 .map(String::toUpperCase)
                 .forEach(ids::add);
         return new ArrayList<>(ids);
+    }
+
+    private Map<String, List<MetarData>> fetchHistoryByAirport(List<String> airportIds, int hours) throws Exception {
+        JSONArray historyResults = aviationWeatherClient.fetchMetarHistory(String.join(",", airportIds), hours);
+        Map<String, List<MetarData>> historyByAirport = new HashMap<>();
+        for (int index = 0; index < historyResults.length(); index++) {
+            MetarData metar = metarParser.parse(historyResults.getJSONObject(index));
+            historyByAirport.computeIfAbsent(metar.airportId(), ignored -> new ArrayList<>()).add(metar);
+        }
+        historyByAirport.replaceAll((airportId, history) -> history.stream()
+                .sorted(Comparator.comparing(MetarData::observationTime))
+                .toList());
+        return historyByAirport;
+    }
+
+    private Map<String, TafData> fetchTafsSafely(List<String> airportIds) {
+        try {
+            return tafParser.parseMany(tafClient.fetchRawTafs(String.join(",", airportIds)));
+        } catch (Exception exception) {
+            return Map.of();
+        }
+    }
+
+    private Map<String, List<MetarData>> fetchHistorySafely(List<String> airportIds, int hours) {
+        try {
+            return fetchHistoryByAirport(airportIds, hours);
+        } catch (Exception exception) {
+            return Map.of();
+        }
     }
 }

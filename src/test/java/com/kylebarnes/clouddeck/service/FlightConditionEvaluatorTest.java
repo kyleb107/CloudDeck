@@ -78,6 +78,7 @@ class FlightConditionEvaluatorTest {
                         "TAF KAAA",
                         List.of(new TafPeriod("FM011200", "FM", departureTime.minusHours(1), departureTime.plusHours(4), 180, 10, 0, 6.0f, List.of(new CloudLayer("SCT", 5000)), List.of(), "FM011200 18010KT P6SM SCT050"))
                 ),
+                List.of(),
                 List.of()
         );
         AirportWeather destination = new AirportWeather(
@@ -96,6 +97,7 @@ class FlightConditionEvaluatorTest {
                                 new TafPeriod("TEMPO011315", "TEMPO", arrivalTime.minusMinutes(15), arrivalTime.plusHours(2), 200, 12, 0, 2.0f, List.of(new CloudLayer("BKN", 800)), List.of("-RA"), "TEMPO 011315/011500 2SM -RA BKN008")
                         )
                 ),
+                List.of(),
                 List.of()
         );
 

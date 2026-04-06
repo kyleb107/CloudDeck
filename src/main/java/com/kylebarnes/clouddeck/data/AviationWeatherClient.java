@@ -9,6 +9,7 @@ import java.net.http.HttpResponse;
 
 public class AviationWeatherClient {
     private static final String METAR_URL = "https://aviationweather.gov/api/data/metar?ids=%s&format=json";
+    private static final String METAR_HISTORY_URL = "https://aviationweather.gov/api/data/metar?ids=%s&format=json&hours=%d";
 
     private final HttpClient httpClient;
 
@@ -22,6 +23,15 @@ public class AviationWeatherClient {
 
     public JSONArray fetchMetars(String airportIds) throws Exception {
         String url = String.format(METAR_URL, airportIds.toUpperCase());
+        return fetchMetarsFromUrl(url, airportIds);
+    }
+
+    public JSONArray fetchMetarHistory(String airportIds, int hours) throws Exception {
+        String url = String.format(METAR_HISTORY_URL, airportIds.toUpperCase(), hours);
+        return fetchMetarsFromUrl(url, airportIds);
+    }
+
+    private JSONArray fetchMetarsFromUrl(String url, String airportIds) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .build();

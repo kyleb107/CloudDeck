@@ -348,7 +348,11 @@ public class TafParser {
             yearMonth = yearMonth.plusMonths(1);
         }
 
-        LocalDateTime resolved = LocalDateTime.of(yearMonth.getYear(), yearMonth.getMonth(), dayOfMonth, hour, 0);
+        int normalizedHour = hour == 24 ? 0 : hour;
+        LocalDateTime resolved = LocalDateTime.of(yearMonth.getYear(), yearMonth.getMonth(), dayOfMonth, normalizedHour, 0);
+        if (hour == 24) {
+            resolved = resolved.plusDays(1);
+        }
         if (resolved.isBefore(reference.minusDays(1))) {
             resolved = resolved.plusMonths(1);
         }
