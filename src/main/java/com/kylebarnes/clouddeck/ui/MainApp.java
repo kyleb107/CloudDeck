@@ -1,200 +1,52 @@
 package com.kylebarnes.clouddeck.ui;
 
-import com.kylebarnes.clouddeck.data.AviationWeatherClient;
-import com.kylebarnes.clouddeck.data.MetarParser;
-import com.kylebarnes.clouddeck.data.OurAirportsRepository;
-import com.kylebarnes.clouddeck.data.TafClient;
-import com.kylebarnes.clouddeck.data.TafParser;
 import com.kylebarnes.clouddeck.model.AircraftProfile;
-import com.kylebarnes.clouddeck.model.AirportDiagramPreview;
-import com.kylebarnes.clouddeck.model.AlternateAirportOption;
-import com.kylebarnes.clouddeck.model.AppSettings;
-import com.kylebarnes.clouddeck.model.AirportInfo;
-import com.kylebarnes.clouddeck.model.AirportSuggestion;
-import com.kylebarnes.clouddeck.model.AirportWeather;
-import com.kylebarnes.clouddeck.model.CrosswindComponents;
-import com.kylebarnes.clouddeck.model.DistanceUnit;
-import com.kylebarnes.clouddeck.model.MetarData;
-import com.kylebarnes.clouddeck.model.RecentRouteEntry;
-import com.kylebarnes.clouddeck.model.RoutePlan;
-import com.kylebarnes.clouddeck.model.Runway;
-import com.kylebarnes.clouddeck.model.SolarTimes;
-import com.kylebarnes.clouddeck.model.TafData;
-import com.kylebarnes.clouddeck.model.TafPeriod;
-import com.kylebarnes.clouddeck.model.TemperatureUnit;
-import com.kylebarnes.clouddeck.model.TimeDisplayMode;
 import com.kylebarnes.clouddeck.model.ThemePreset;
-import com.kylebarnes.clouddeck.model.TimedRouteAssessment;
-import com.kylebarnes.clouddeck.model.AltimeterUnit;
-import com.kylebarnes.clouddeck.model.WindUnit;
-import com.kylebarnes.clouddeck.service.CrosswindCalculator;
-import com.kylebarnes.clouddeck.service.DensityAltitudeAssessment;
-import com.kylebarnes.clouddeck.service.DensityAltitudeService;
-import com.kylebarnes.clouddeck.service.AlternateAirportService;
-import com.kylebarnes.clouddeck.service.AirportDiagramService;
-import com.kylebarnes.clouddeck.service.BriefingExportService;
-import com.kylebarnes.clouddeck.service.BriefingExportResult;
-import com.kylebarnes.clouddeck.service.FaaChartLinkService;
-import com.kylebarnes.clouddeck.service.FlightConditionEvaluator;
-import com.kylebarnes.clouddeck.service.FlightPlanningService;
-import com.kylebarnes.clouddeck.service.MetarTrendService;
-import com.kylebarnes.clouddeck.service.MetarTrendSummary;
-import com.kylebarnes.clouddeck.service.OperationalAlert;
-import com.kylebarnes.clouddeck.service.OperationalAlertService;
-import com.kylebarnes.clouddeck.service.RouteAssessment;
-import com.kylebarnes.clouddeck.service.RouteDecisionLevel;
-import com.kylebarnes.clouddeck.service.RunwayAnalysis;
-import com.kylebarnes.clouddeck.service.RunwayAnalysisService;
-import com.kylebarnes.clouddeck.service.SolarCalculatorService;
-import com.kylebarnes.clouddeck.service.VfrAssessment;
-import com.kylebarnes.clouddeck.service.VfrStatusLevel;
-import com.kylebarnes.clouddeck.service.WeatherService;
-import com.kylebarnes.clouddeck.storage.AircraftProfileRepository;
-import com.kylebarnes.clouddeck.storage.FavoritesRepository;
-import com.kylebarnes.clouddeck.storage.LocalAircraftProfileRepository;
-import com.kylebarnes.clouddeck.storage.LocalFavoritesRepository;
-import com.kylebarnes.clouddeck.storage.LocalRouteHistoryRepository;
-import com.kylebarnes.clouddeck.storage.LocalSettingsRepository;
-import com.kylebarnes.clouddeck.storage.RouteHistoryRepository;
-import com.kylebarnes.clouddeck.storage.SettingsRepository;
 import javafx.application.Application;
-import javafx.application.Platform;
-import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
-import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
-import javafx.scene.control.ListView;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.control.Separator;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.TextField;
 import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.FlowPane;
-import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-import javafx.stage.Popup;
 import javafx.stage.Stage;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.function.Consumer;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.nio.file.Path;
-import java.util.stream.Collectors;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Map;
-import java.util.Set;
 
 public class MainApp extends Application {
-    private static final String CARD_SHADOW = "dropshadow(gaussian, rgba(0,0,0,0.18), 18, 0.2, 0, 6)";
 
-    private final OurAirportsRepository airportsRepository = new OurAirportsRepository();
-    private final WeatherService weatherService = new WeatherService(
-            new AviationWeatherClient(),
-            new TafClient(),
-            new MetarParser(),
-            new TafParser(),
-            airportsRepository
-    );
-    private final FlightConditionEvaluator flightConditionEvaluator = new FlightConditionEvaluator();
-    private final RunwayAnalysisService runwayAnalysisService = new RunwayAnalysisService();
-    private final FlightPlanningService flightPlanningService = new FlightPlanningService();
-    private final BriefingExportService briefingExportService = new BriefingExportService();
-    private final FaaChartLinkService faaChartLinkService = new FaaChartLinkService();
-    private final AirportDiagramService airportDiagramService = new AirportDiagramService();
-    private final MetarTrendService metarTrendService = new MetarTrendService();
-    private final OperationalAlertService operationalAlertService = new OperationalAlertService();
-    private final DensityAltitudeService densityAltitudeService = new DensityAltitudeService();
-    private final AlternateAirportService alternateAirportService = new AlternateAirportService(
-            airportsRepository,
-            weatherService,
-            flightConditionEvaluator,
-            runwayAnalysisService
-    );
-    private final SolarCalculatorService solarCalculatorService = new SolarCalculatorService();
-    private final FavoritesRepository favoritesRepository = new LocalFavoritesRepository();
-    private final AircraftProfileRepository aircraftProfileRepository = new LocalAircraftProfileRepository();
-    private final SettingsRepository settingsRepository = new LocalSettingsRepository();
-    private final RouteHistoryRepository routeHistoryRepository = new LocalRouteHistoryRepository();
-    private final ExecutorService backgroundExecutor = Executors.newCachedThreadPool(runnable -> {
-        Thread thread = new Thread(runnable);
-        thread.setDaemon(true);
-        thread.setName("clouddeck-background");
-        return thread;
-    });
-
-    private final VBox favoritesBar = new VBox(6);
-    private final VBox weatherCardsContainer = new VBox(14);
-    private final VBox routeResultsBox = new VBox(12);
-    private final VBox recentRoutesBox = new VBox(8);
-    private final VBox aircraftSummaryBox = new VBox(8);
-    private final ComboBox<AircraftProfile> aircraftSelector = new ComboBox<>();
-    private final Label aircraftHeroSummary = new Label();
-    private final Label aircraftHeroNote = new Label();
-    private static final DateTimeFormatter ROUTE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-    private static final DateTimeFormatter CLOCK_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
-    private final Map<String, Image> airportDiagramImageCache = new ConcurrentHashMap<>();
-    private final Map<String, String> airportDiagramStatusCache = new ConcurrentHashMap<>();
-    private final Set<String> airportDiagramLoading = ConcurrentHashMap.newKeySet();
-    private final Map<String, List<MetarData>> metarHistoryCache = new ConcurrentHashMap<>();
-    private final Map<String, String> metarHistoryStatusCache = new ConcurrentHashMap<>();
-    private final Set<String> metarHistoryLoading = ConcurrentHashMap.newKeySet();
-
-    private ThemePalette themePalette;
-    private AppSettings appSettings;
+    private AppContext ctx;
+    private UiHelper ui;
     private Stage primaryStage;
     private Scene scene;
-    private TextField weatherAirportInput;
-    private Label routeStatusLabel;
-    private TextField routeDepartureInput;
-    private TextField routeDestinationInput;
-    private TextField routeDepartureTimeInput;
-    private ComboBox<TimeDisplayMode> routeTimeModeBox;
-    private Label routeTimeHelperLabel;
-    private List<AirportWeather> latestWeatherResults = List.of();
-    private List<AirportWeather> latestRouteResults = List.of();
-    private List<AlternateAirportOption> latestAlternateOptions = List.of();
-    private boolean alternateSuggestionsLoading;
-    private String alternateSuggestionsStatus = "";
-    private String settingsStatusMessage = "";
-    private String latestRouteDeparture;
-    private String latestRouteDestination;
     private AppView activeView = AppView.WEATHER;
+    private WeatherView weatherView;
+    private RouteView routeView;
 
     @Override
     public void start(Stage stage) {
         primaryStage = stage;
-        appSettings = settingsRepository.loadSettings();
-        themePalette = ThemePalette.forPreset(appSettings.themePreset());
-        reloadAircraftProfiles(appSettings.defaultAircraftName());
-        aircraftSelector.valueProperty().addListener((observable, oldValue, newValue) -> {
+        ctx = new AppContext();
+        ctx.appSettings = ctx.settingsRepository.loadSettings();
+        ctx.themePalette = ThemePalette.forPreset(ctx.appSettings.themePreset());
+        ui = new UiHelper(ctx);
+
+        reloadAircraftProfiles(ctx.appSettings.defaultAircraftName());
+        ctx.aircraftSelector.valueProperty().addListener((observable, oldValue, newValue) -> {
             updateAircraftDisplays();
-            invalidateAlternateSuggestions();
-            rerenderWeatherCards();
-            rerenderRouteResults();
+            ctx.invalidateAlternateSuggestions();
+            if (ctx.rerenderWeatherCards != null) ctx.rerenderWeatherCards.run();
+            if (ctx.rerenderRouteResults != null) ctx.rerenderRouteResults.run();
         });
 
         BorderPane root = buildRoot(stage);
@@ -209,7 +61,7 @@ public class MainApp extends Application {
 
     @Override
     public void stop() {
-        backgroundExecutor.shutdownNow();
+        ctx.backgroundExecutor.shutdownNow();
     }
 
     public static void main(String[] args) {
@@ -218,8 +70,8 @@ public class MainApp extends Application {
 
     private BorderPane buildRoot(Stage stage) {
         BorderPane root = new BorderPane();
-        root.getStyleClass().add(appSettings.themePreset() == ThemePreset.CLEARSKY ? "theme-clearsky" : "theme-nightfall");
-        root.setStyle("-fx-background-color: linear-gradient(to bottom right, " + themePalette.appBackground() + ", " + themePalette.appBackgroundAlt() + ");");
+        root.getStyleClass().add(ctx.appSettings.themePreset() == ThemePreset.CLEARSKY ? "theme-clearsky" : "theme-nightfall");
+        root.setStyle("-fx-background-color: linear-gradient(to bottom right, " + ctx.themePalette.appBackground() + ", " + ctx.themePalette.appBackgroundAlt() + ");");
         root.setLeft(buildNavigationRail(stage));
 
         BorderPane contentShell = new BorderPane();
@@ -235,9 +87,9 @@ public class MainApp extends Application {
         StackPane brandLogo = createBrandLogo();
 
         Label appName = new Label("CloudDeck");
-        appName.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 18px; -fx-font-weight: bold; -fx-letter-spacing: 0.6px;");
+        appName.setStyle("-fx-text-fill: " + ctx.themePalette.textPrimary() + "; -fx-font-size: 18px; -fx-font-weight: bold; -fx-letter-spacing: 0.6px;");
         Label appSub = new Label("Flight planning console");
-        appSub.setStyle("-fx-text-fill: " + themePalette.textMuted() + "; -fx-font-size: 11px;");
+        appSub.setStyle("-fx-text-fill: " + ctx.themePalette.textMuted() + "; -fx-font-size: 11px;");
 
         HBox brandRow = new HBox(12, brandLogo, new VBox(4, appName, appSub));
         brandRow.setAlignment(Pos.CENTER_LEFT);
@@ -252,13 +104,13 @@ public class MainApp extends Application {
 
         VBox missionCard = new VBox(
                 6,
-                createRailEyebrow("Mode"),
-                createRailValue(activeView.displayName()),
-                createMutedLabel("Use the left rail to move between briefing, planning, aircraft, and app configuration.")
+                ui.createRailEyebrow("Mode"),
+                ui.createRailValue(activeView.displayName()),
+                ui.createMutedLabel("Use the left rail to move between briefing, planning, aircraft, and app configuration.")
         );
         missionCard.setPadding(new Insets(14));
         missionCard.setStyle(
-                "-fx-background-color: " + themePalette.metricBackground() + "; -fx-border-color: " + themePalette.metricBorder() + ";" +
+                "-fx-background-color: " + ctx.themePalette.metricBackground() + "; -fx-border-color: " + ctx.themePalette.metricBorder() + ";" +
                         "-fx-background-radius: 18; -fx-border-radius: 18;"
         );
 
@@ -269,8 +121,8 @@ public class MainApp extends Application {
         rail.setPadding(new Insets(24, 18, 24, 18));
         rail.setPrefWidth(260);
         rail.setStyle(
-                "-fx-background-color: linear-gradient(to bottom, " + themePalette.surfaceBackgroundAlt() + ", " + themePalette.surfaceBackground() + ");" +
-                        "-fx-border-color: transparent " + themePalette.borderColor() + " transparent transparent; -fx-border-width: 0 1 0 0;"
+                "-fx-background-color: linear-gradient(to bottom, " + ctx.themePalette.surfaceBackgroundAlt() + ", " + ctx.themePalette.surfaceBackground() + ");" +
+                        "-fx-border-color: transparent " + ctx.themePalette.borderColor() + " transparent transparent; -fx-border-width: 0 1 0 0;"
         );
         return rail;
     }
@@ -278,13 +130,13 @@ public class MainApp extends Application {
     private VBox buildRailFooter() {
         VBox footer = new VBox(
                 6,
-                createRailEyebrow("Display"),
-                createRailValue(appSettings.timeDisplayMode().displayName() + " / " + appSettings.windUnit().displayName()),
-                createMutedLabel(appSettings.homeAirport().isBlank() ? "Home airport not set" : "Home " + appSettings.homeAirport())
+                ui.createRailEyebrow("Display"),
+                ui.createRailValue(ctx.appSettings.timeDisplayMode().displayName() + " / " + ctx.appSettings.windUnit().displayName()),
+                ui.createMutedLabel(ctx.appSettings.homeAirport().isBlank() ? "Home airport not set" : "Home " + ctx.appSettings.homeAirport())
         );
         footer.setPadding(new Insets(14));
         footer.setStyle(
-                "-fx-background-color: " + themePalette.insetBackground() + "; -fx-border-color: " + themePalette.insetBorder() + ";" +
+                "-fx-background-color: " + ctx.themePalette.insetBackground() + "; -fx-border-color: " + ctx.themePalette.insetBorder() + ";" +
                         "-fx-background-radius: 18; -fx-border-radius: 18;"
         );
         return footer;
@@ -296,7 +148,7 @@ public class MainApp extends Application {
         logo.setPrefSize(58, 58);
         logo.setMaxSize(58, 58);
         logo.setStyle(
-                "-fx-background-color: linear-gradient(to bottom right, " + themePalette.primaryGradientStart() + ", " + themePalette.primaryGradientEnd() + ");" +
+                "-fx-background-color: linear-gradient(to bottom right, " + ctx.themePalette.primaryGradientStart() + ", " + ctx.themePalette.primaryGradientEnd() + ");" +
                         "-fx-background-radius: 20; -fx-border-color: rgba(255,255,255,0.18); -fx-border-width: 1; -fx-border-radius: 20;"
         );
 
@@ -309,7 +161,7 @@ public class MainApp extends Application {
 
         SVGPath airplane = new SVGPath();
         airplane.setContent("M11 31 L23 31 L39 21 L43 23 L32 31 L45 31 L53 27 L56 29 L49 34 L56 39 L53 41 L45 37 L32 37 L43 45 L39 47 L23 37 L11 37 L15 34 Z");
-        airplane.setFill(Color.web(themePalette.appBackground()));
+        airplane.setFill(Color.web(ctx.themePalette.appBackground()));
         airplane.setScaleX(0.72);
         airplane.setScaleY(0.72);
         airplane.setTranslateX(1);
@@ -323,13 +175,13 @@ public class MainApp extends Application {
         boolean selected = activeView == view;
 
         Label codeLabel = new Label(code);
-        codeLabel.setStyle("-fx-text-fill: " + (selected ? themePalette.textPrimary() : themePalette.accentGold()) + "; -fx-font-size: 10px; -fx-font-weight: bold; -fx-letter-spacing: 1.2px;");
+        codeLabel.setStyle("-fx-text-fill: " + (selected ? ctx.themePalette.textPrimary() : ctx.themePalette.accentGold()) + "; -fx-font-size: 10px; -fx-font-weight: bold; -fx-letter-spacing: 1.2px;");
 
         Label titleLabel = new Label(label);
-        titleLabel.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 14px; -fx-font-weight: bold;");
+        titleLabel.setStyle("-fx-text-fill: " + ctx.themePalette.textPrimary() + "; -fx-font-size: 14px; -fx-font-weight: bold;");
 
         Label subLabel = new Label(view.tagline());
-        subLabel.setStyle("-fx-text-fill: " + themePalette.textMuted() + "; -fx-font-size: 11px;");
+        subLabel.setStyle("-fx-text-fill: " + ctx.themePalette.textMuted() + "; -fx-font-size: 11px;");
 
         VBox textBlock = new VBox(3, codeLabel, titleLabel, subLabel);
         HBox content = new HBox(textBlock);
@@ -340,8 +192,8 @@ public class MainApp extends Application {
         button.setMaxWidth(Double.MAX_VALUE);
         button.setAlignment(Pos.CENTER_LEFT);
         button.setStyle(
-                "-fx-background-color: " + (selected ? themePalette.metricBackground() : "transparent") + ";" +
-                        "-fx-border-color: " + (selected ? themePalette.accentBlue() : themePalette.borderColor()) + ";" +
+                "-fx-background-color: " + (selected ? ctx.themePalette.metricBackground() : "transparent") + ";" +
+                        "-fx-border-color: " + (selected ? ctx.themePalette.accentBlue() : ctx.themePalette.borderColor()) + ";" +
                         "-fx-border-width: 1 1 1 4; -fx-background-radius: 18; -fx-border-radius: 18; -fx-padding: 14px 16px; -fx-cursor: hand;"
         );
         button.setOnAction(event -> switchView(view, stage));
@@ -354,19 +206,38 @@ public class MainApp extends Application {
         }
         activeView = view;
         rebuildScene(
-                weatherAirportInput == null ? "" : weatherAirportInput.getText(),
-                routeDepartureInput == null ? "" : routeDepartureInput.getText(),
-                routeDestinationInput == null ? "" : routeDestinationInput.getText(),
-                routeDepartureTimeInput == null ? "" : routeDepartureTimeInput.getText()
+                weatherView == null ? "" : weatherView.getAirportInput() == null ? "" : weatherView.getAirportInput().getText(),
+                routeView == null ? "" : routeView.getDepartureInput() == null ? "" : routeView.getDepartureInput().getText(),
+                routeView == null ? "" : routeView.getDestinationInput() == null ? "" : routeView.getDestinationInput().getText(),
+                routeView == null ? "" : routeView.getDepartureTimeInput() == null ? "" : routeView.getDepartureTimeInput().getText()
         );
     }
 
     private javafx.scene.Node buildActiveView(Stage stage) {
         return switch (activeView) {
-            case WEATHER -> buildWeatherTab(stage);
-            case ROUTE -> buildRouteTab(stage);
-            case AIRCRAFT -> buildAircraftTab();
-            case SETTINGS -> buildSettingsTab(stage);
+            case WEATHER -> {
+                WeatherView wv = new WeatherView(ctx, ui, this::openExternalUrl);
+                weatherView = wv;
+                yield wv.build(stage);
+            }
+            case ROUTE -> {
+                RouteView rv = new RouteView(ctx, ui, this::openExternalUrl);
+                routeView = rv;
+                yield rv.build(stage);
+            }
+            case AIRCRAFT -> new AircraftView(ctx, ui).build();
+            case SETTINGS -> {
+                String wInput = weatherView == null ? "" : weatherView.getAirportInput() == null ? "" : weatherView.getAirportInput().getText();
+                String rDep = routeView == null ? "" : routeView.getDepartureInput() == null ? "" : routeView.getDepartureInput().getText();
+                String rDest = routeView == null ? "" : routeView.getDestinationInput() == null ? "" : routeView.getDestinationInput().getText();
+                String rTime = routeView == null ? "" : routeView.getDepartureTimeInput() == null ? "" : routeView.getDepartureTimeInput().getText();
+                SettingsView sv = new SettingsView(ctx, ui, this::openExternalUrl, () -> {
+                    reloadAircraftProfiles(ctx.appSettings.defaultAircraftName());
+                    ctx.invalidateAlternateSuggestions();
+                    rebuildScene(wInput, rDep, rDest, rTime);
+                });
+                yield sv.build(stage, wInput, rDep, rDest, rTime);
+            }
         };
     }
 
@@ -374,68 +245,68 @@ public class MainApp extends Application {
         BorderPane root = buildRoot(primaryStage);
         scene.setRoot(root);
 
-        if (weatherAirportInput != null) {
+        if (weatherView != null && weatherView.getAirportInput() != null) {
             if (!weatherInput.isBlank()) {
-                weatherAirportInput.setText(weatherInput);
-            } else if (!appSettings.homeAirport().isBlank()) {
-                weatherAirportInput.setText(appSettings.homeAirport());
+                weatherView.getAirportInput().setText(weatherInput);
+            } else if (!ctx.appSettings.homeAirport().isBlank()) {
+                weatherView.getAirportInput().setText(ctx.appSettings.homeAirport());
             }
         }
-        if (routeDepartureInput != null && !routeDeparture.isBlank()) {
-            routeDepartureInput.setText(routeDeparture);
+        if (routeView != null && routeView.getDepartureInput() != null && !routeDeparture.isBlank()) {
+            routeView.getDepartureInput().setText(routeDeparture);
         }
-        if (routeDestinationInput != null && !routeDestination.isBlank()) {
-            routeDestinationInput.setText(routeDestination);
+        if (routeView != null && routeView.getDestinationInput() != null && !routeDestination.isBlank()) {
+            routeView.getDestinationInput().setText(routeDestination);
         }
-        if (routeDepartureTimeInput != null && !routeTime.isBlank()) {
-            routeDepartureTimeInput.setText(routeTime);
+        if (routeView != null && routeView.getDepartureTimeInput() != null && !routeTime.isBlank()) {
+            routeView.getDepartureTimeInput().setText(routeTime);
         }
 
         updateAircraftDisplays();
-        rerenderWeatherCards();
-        rerenderRouteResults();
+        if (ctx.rerenderWeatherCards != null) ctx.rerenderWeatherCards.run();
+        if (ctx.rerenderRouteResults != null) ctx.rerenderRouteResults.run();
     }
 
     private VBox buildAppHeader() {
         VBox header = new VBox(18);
         header.setPadding(new Insets(26, 28, 18, 28));
         header.setStyle(
-                "-fx-background-color: linear-gradient(to right, " + themePalette.headerOverlay() + ", " + themePalette.surfaceBackgroundAlt() + ");" +
-                        "-fx-border-color: transparent transparent " + themePalette.borderColor() + " transparent; -fx-border-width: 0 0 1 0;"
+                "-fx-background-color: linear-gradient(to right, " + ctx.themePalette.headerOverlay() + ", " + ctx.themePalette.surfaceBackgroundAlt() + ");" +
+                        "-fx-border-color: transparent transparent " + ctx.themePalette.borderColor() + " transparent; -fx-border-width: 0 0 1 0;"
         );
 
         Label eyebrow = new Label("Pilot briefing workspace");
-        eyebrow.setStyle("-fx-text-fill: " + themePalette.accentGold() + "; -fx-font-size: 12px; -fx-font-weight: bold;");
+        eyebrow.setStyle("-fx-text-fill: " + ctx.themePalette.accentGold() + "; -fx-font-size: 12px; -fx-font-weight: bold;");
 
         Label title = new Label("CloudDeck");
         title.setFont(Font.font("Bahnschrift SemiCondensed", FontWeight.BOLD, 38));
-        title.setTextFill(Color.web(themePalette.textPrimary()));
+        title.setTextFill(Color.web(ctx.themePalette.textPrimary()));
 
         Label subtitle = new Label("Weather, forecasts, runway suitability, and fuel planning in one cockpit-friendly workflow.");
-        subtitle.setStyle("-fx-text-fill: " + themePalette.textMuted() + "; -fx-font-size: 14px;");
+        subtitle.setStyle("-fx-text-fill: " + ctx.themePalette.textMuted() + "; -fx-font-size: 14px;");
         subtitle.setWrapText(true);
 
         VBox branding = new VBox(8, eyebrow, title, subtitle);
         branding.setMaxWidth(540);
 
         Label selectorLabel = new Label("Selected Aircraft");
-        selectorLabel.setStyle("-fx-text-fill: " + themePalette.unknownGray() + "; -fx-font-size: 11px; -fx-font-weight: bold;");
+        selectorLabel.setStyle("-fx-text-fill: " + ctx.themePalette.unknownGray() + "; -fx-font-size: 11px; -fx-font-weight: bold;");
 
-        aircraftSelector.setPromptText("Choose an aircraft profile");
-        aircraftSelector.setPrefWidth(320);
-        aircraftSelector.setStyle(
-                "-fx-background-color: " + themePalette.controlBackground() + "; -fx-border-color: " + themePalette.borderColor() + "; " +
-                        "-fx-text-fill: " + themePalette.textPrimary() + "; -fx-background-radius: 12; -fx-border-radius: 12; -fx-padding: 4px;"
+        ctx.aircraftSelector.setPromptText("Choose an aircraft profile");
+        ctx.aircraftSelector.setPrefWidth(320);
+        ctx.aircraftSelector.setStyle(
+                "-fx-background-color: " + ctx.themePalette.controlBackground() + "; -fx-border-color: " + ctx.themePalette.borderColor() + "; " +
+                        "-fx-text-fill: " + ctx.themePalette.textPrimary() + "; -fx-background-radius: 12; -fx-border-radius: 12; -fx-padding: 4px;"
         );
 
-        aircraftHeroSummary.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 13px; -fx-font-weight: bold;");
-        aircraftHeroNote.setStyle("-fx-text-fill: " + themePalette.textMuted() + "; -fx-font-size: 12px;");
-        aircraftHeroNote.setWrapText(true);
+        ctx.aircraftHeroSummary.setStyle("-fx-text-fill: " + ctx.themePalette.textPrimary() + "; -fx-font-size: 13px; -fx-font-weight: bold;");
+        ctx.aircraftHeroNote.setStyle("-fx-text-fill: " + ctx.themePalette.textMuted() + "; -fx-font-size: 12px;");
+        ctx.aircraftHeroNote.setWrapText(true);
 
-        VBox aircraftCard = createPanel(
+        VBox aircraftCard = ui.createPanel(
                 "Aircraft Profile",
                 "Runway warnings and route fuel calculations use the active profile.",
-                new VBox(10, selectorLabel, aircraftSelector, aircraftHeroSummary, aircraftHeroNote)
+                new VBox(10, selectorLabel, ctx.aircraftSelector, ctx.aircraftHeroSummary, ctx.aircraftHeroNote)
         );
         aircraftCard.setMaxWidth(380);
 
@@ -451,1745 +322,54 @@ public class MainApp extends Application {
     private HBox buildHeaderStatusStrip() {
         HBox strip = new HBox(
                 10,
-                createHeaderChip("Display", appSettings.timeDisplayMode().displayName() + " / " + appSettings.windUnit().displayName()),
-                createHeaderChip("Home", appSettings.homeAirport().isBlank() ? "Unset" : appSettings.homeAirport()),
-                createHeaderChip("Theme", appSettings.themePreset().displayName()),
-                createHeaderChip("Aircraft", aircraftSelector.getValue() == null ? "No profile" : aircraftSelector.getValue().name())
+                ui.createHeaderChip("Display", ctx.appSettings.timeDisplayMode().displayName() + " / " + ctx.appSettings.windUnit().displayName()),
+                ui.createHeaderChip("Home", ctx.appSettings.homeAirport().isBlank() ? "Unset" : ctx.appSettings.homeAirport()),
+                ui.createHeaderChip("Theme", ctx.appSettings.themePreset().displayName()),
+                ui.createHeaderChip("Aircraft", ctx.aircraftSelector.getValue() == null ? "No profile" : ctx.aircraftSelector.getValue().name())
         );
         strip.setAlignment(Pos.CENTER_LEFT);
         return strip;
     }
-    private ScrollPane buildWeatherTab(Stage stage) {
-        Label sectionTitle = createSectionTitle("Live Weather");
-        Label sectionSubtitle = createSectionSubtitle("Search airports, review TAF outlooks, and compare runway suitability against your selected aircraft.");
 
-        weatherAirportInput = createInputField("Enter ICAO ID(s) ex: KDFW, KHOU, KLFK", 420);
-        if (!appSettings.homeAirport().isBlank()) {
-            weatherAirportInput.setText(appSettings.homeAirport());
-        }
-        attachAutocomplete(weatherAirportInput, stage);
-
-        Button fetchButton = createPrimaryButton("Load Briefing");
-        Button homeButton = createSecondaryButton("Use Home");
-        homeButton.setOnAction(event -> {
-            if (!appSettings.homeAirport().isBlank()) {
-                weatherAirportInput.setText(appSettings.homeAirport());
-            }
-        });
-        Label statusLabel = createMutedLabel("");
-
-        fetchButton.setOnAction(event -> {
-            String input = weatherAirportInput.getText().trim();
-            if (input.isEmpty()) {
-                statusLabel.setText("Please enter at least one ICAO airport ID.");
-                return;
-            }
-
-            weatherCardsContainer.getChildren().clear();
-            statusLabel.setText("Fetching METAR, TAF, and runway data...");
-
-            runAsync(
-                    () -> weatherService.fetchAirportWeather(input),
-                    weather -> {
-                        latestWeatherResults = weather;
-                        resetLazyHistoryStatuses(weather);
-                        rerenderWeatherCards();
-                        statusLabel.setText("");
-                        refreshFavoritesBar(weatherAirportInput);
-                    },
-                    throwable -> statusLabel.setText("Error: " + throwable.getMessage())
-            );
-        });
-
-        VBox controlsCard = createPanel(
-                "Airport Search",
-                "Separate multiple ICAO identifiers with commas.",
-                new HBox(12, weatherAirportInput, fetchButton, homeButton)
-        );
-
-        VBox favoritesCard = createPanel(
-                "Saved Airports",
-                "Quick-launch the stations you check most often.",
-                favoritesBar
-        );
-        refreshFavoritesBar(weatherAirportInput);
-
-        VBox content = new VBox(
-                16,
-                sectionTitle,
-                sectionSubtitle,
-                buildSectionFlightStrip(
-                        createSectionStripCard("Briefing", "Airport weather deck"),
-                        createSectionStripCard("Display", appSettings.timeDisplayMode().displayName()),
-                        createSectionStripCard("Profile", aircraftSelector.getValue() == null ? "No aircraft" : aircraftSelector.getValue().name())
-                ),
-                controlsCard,
-                favoritesCard,
-                statusLabel,
-                weatherCardsContainer
-        );
-        content.setPadding(new Insets(24));
-        content.setStyle("-fx-background-color: transparent;");
-
-        ScrollPane scrollPane = new ScrollPane(content);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
-        return scrollPane;
-    }
-
-    private ScrollPane buildRouteTab(Stage stage) {
-        Label sectionTitle = createSectionTitle("Route Planner");
-        Label sectionSubtitle = createSectionSubtitle("Pair current conditions with forecast periods, route assumptions, and reserve checks.");
-
-        routeDepartureInput = createInputField("Departure ex: KLFK", 220);
-        if (latestRouteDeparture != null && !latestRouteDeparture.isBlank()) {
-            routeDepartureInput.setText(latestRouteDeparture);
-        } else if (!appSettings.homeAirport().isBlank()) {
-            routeDepartureInput.setText(appSettings.homeAirport());
-        }
-        routeDestinationInput = createInputField("Destination ex: KDFW", 220);
-        if (latestRouteDestination != null && !latestRouteDestination.isBlank()) {
-            routeDestinationInput.setText(latestRouteDestination);
-        }
-        routeTimeModeBox = new ComboBox<>();
-        routeTimeModeBox.getItems().setAll(TimeDisplayMode.UTC, TimeDisplayMode.LOCAL);
-        routeTimeModeBox.setValue(appSettings.timeDisplayMode());
-        routeTimeModeBox.setPrefWidth(140);
-        routeDepartureTimeInput = createInputField("Departure time yyyy-MM-dd HH:mm", 240);
-        routeDepartureTimeInput.setText(routeDepartureTimeInput.getText().isBlank()
-                ? formatRouteInputValue(
-                        LocalDateTime.now(ZoneOffset.UTC).plusHours(1).withMinute(0).withSecond(0).withNano(0),
-                        routeTimeModeBox.getValue()
-                )
-                : routeDepartureTimeInput.getText());
-        routeTimeHelperLabel = createMutedLabel("");
-        routeDepartureTimeInput.textProperty().addListener((observable, oldValue, newValue) -> updateRouteTimeHelper());
-        routeTimeModeBox.valueProperty().addListener((observable, oldValue, newValue) -> {
-            if (oldValue != null && newValue != null && routeDepartureTimeInput != null && !routeDepartureTimeInput.getText().isBlank()) {
-                LocalDateTime parsedTimeUtc = parseRouteTimeInput(routeDepartureTimeInput.getText(), oldValue);
-                if (parsedTimeUtc != null) {
-                    routeDepartureTimeInput.setText(formatRouteInputValue(parsedTimeUtc, newValue));
-                }
-            }
-            updateRouteTimeHelper();
-        });
-        attachAutocomplete(routeDepartureInput, stage);
-        attachAutocomplete(routeDestinationInput, stage);
-        updateRouteTimeHelper();
-
-        Button planButton = createPrimaryButton("Analyze Route");
-        Button exportButton = createSecondaryButton("Export Briefing");
-        routeStatusLabel = createMutedLabel("");
-        refreshRecentRoutes();
-
-        planButton.setOnAction(event -> {
-            analyzeRouteFromInputs();
-        });
-
-        exportButton.setOnAction(event -> {
-            if (latestRouteResults.isEmpty() || latestRouteDeparture == null || latestRouteDestination == null) {
-                routeStatusLabel.setText("Analyze a route before exporting a briefing.");
-                return;
-            }
-
-            AircraftProfile aircraftProfile = aircraftSelector.getValue();
-            AirportInfo departureAirport = airportsRepository.findAirportByIcao(latestRouteDeparture);
-            AirportInfo destinationAirport = airportsRepository.findAirportByIcao(latestRouteDestination);
-            AirportWeather departureWeather = findRouteWeather(latestRouteDeparture);
-            AirportWeather destinationWeather = findRouteWeather(latestRouteDestination);
-            RouteAssessment routeAssessment = flightConditionEvaluator.assessRoute(
-                    latestRouteResults,
-                    latestRouteDeparture,
-                    latestRouteDestination,
-                    appSettings
-            );
-
-            RoutePlan routePlan = aircraftProfile == null
-                    ? null
-                    : flightPlanningService.planDirectRoute(departureAirport, destinationAirport, aircraftProfile, appSettings);
-            TimedRouteAssessment timedRouteAssessment = null;
-            LocalDateTime departureTimeUtc = getPlannedDepartureTimeUtc();
-            if (routePlan != null && departureTimeUtc != null) {
-                timedRouteAssessment = flightConditionEvaluator.assessTimedRoute(
-                        departureWeather,
-                        destinationWeather,
-                        departureTimeUtc,
-                        departureTimeUtc.plusMinutes((long) Math.round(routePlan.estimatedTimeHours() * 60)),
-                        appSettings
-                );
-            }
-
-            try {
-                List<OperationalAlert> alerts = collectRouteOperationalAlerts(
-                        routePlan,
-                        aircraftProfile,
-                        departureWeather,
-                        destinationWeather,
-                        routeAssessment,
-                        timedRouteAssessment
-                );
-                BriefingExportResult exportResult = briefingExportService.exportRouteBriefing(
-                        routePlan,
-                        aircraftProfile,
-                        latestRouteResults,
-                        routeAssessment,
-                        timedRouteAssessment,
-                        alerts,
-                        latestAlternateOptions,
-                        appSettings
-                );
-                routeStatusLabel.setText("Briefing exported: " + exportResult.textPath().getFileName() + " and " + exportResult.pdfPath().getFileName());
-            } catch (Exception exception) {
-                routeStatusLabel.setText("Could not export briefing: " + exception.getMessage());
-            }
-        });
-
-        VBox plannerCard = createPanel(
-                "Direct Route Setup",
-                "Enter a route, set departure time, then review the decision summary before diving into airport details.",
-                buildRoutePlannerControls(planButton, exportButton)
-        );
-        VBox recentRoutesCard = createPanel(
-                "Recent Routes",
-                "Reuse recent route checks with their saved UTC departure time and your preferred display format.",
-                recentRoutesBox
-        );
-
-        HBox topRow = new HBox(16, plannerCard, recentRoutesCard);
-        plannerCard.setMaxWidth(Double.MAX_VALUE);
-        recentRoutesCard.setPrefWidth(340);
-        HBox.setHgrow(plannerCard, Priority.ALWAYS);
-
-        VBox content = new VBox(
-                16,
-                sectionTitle,
-                sectionSubtitle,
-                buildSectionFlightStrip(
-                        createSectionStripCard("Dispatch", "Route decision board"),
-                        createSectionStripCard("Input Time", routeTimeModeLabel()),
-                        createSectionStripCard("Fuel Buffer", formatOneDecimal(appSettings.taxiFuelGallons() + appSettings.climbFuelGallons()) + " gal")
-                ),
-                topRow,
-                routeStatusLabel,
-                routeResultsBox
-        );
-        content.setPadding(new Insets(24));
-
-        ScrollPane scrollPane = new ScrollPane(content);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
-        return scrollPane;
-    }
-
-    private ScrollPane buildSettingsTab(Stage stage) {
-        Label sectionTitle = createSectionTitle("Settings");
-        Label sectionSubtitle = createSectionSubtitle("Define defaults and thresholds that future planning features can reuse.");
-        AppSettings defaultSettings = AppSettings.defaults();
-
-        TextField homeAirportField = createInputField("Home airport ICAO", 220);
-        homeAirportField.setText(appSettings.homeAirport());
-        attachAutocomplete(homeAirportField, stage);
-
-        ComboBox<ThemePreset> themePresetBox = new ComboBox<>();
-        themePresetBox.getItems().setAll(ThemePreset.values());
-        themePresetBox.setValue(appSettings.themePreset());
-        themePresetBox.setPrefWidth(220);
-
-        ComboBox<TemperatureUnit> temperatureUnitBox = new ComboBox<>();
-        temperatureUnitBox.getItems().setAll(TemperatureUnit.values());
-        temperatureUnitBox.setValue(appSettings.temperatureUnit());
-        temperatureUnitBox.setPrefWidth(220);
-
-        ComboBox<DistanceUnit> distanceUnitBox = new ComboBox<>();
-        distanceUnitBox.getItems().setAll(DistanceUnit.values());
-        distanceUnitBox.setValue(appSettings.distanceUnit());
-        distanceUnitBox.setPrefWidth(220);
-
-        ComboBox<WindUnit> windUnitBox = new ComboBox<>();
-        windUnitBox.getItems().setAll(WindUnit.values());
-        windUnitBox.setValue(appSettings.windUnit());
-        windUnitBox.setPrefWidth(220);
-
-        ComboBox<AltimeterUnit> altimeterUnitBox = new ComboBox<>();
-        altimeterUnitBox.getItems().setAll(AltimeterUnit.values());
-        altimeterUnitBox.setValue(appSettings.altimeterUnit());
-        altimeterUnitBox.setPrefWidth(220);
-
-        ComboBox<TimeDisplayMode> timeDisplayModeBox = new ComboBox<>();
-        timeDisplayModeBox.getItems().setAll(TimeDisplayMode.values());
-        timeDisplayModeBox.setValue(appSettings.timeDisplayMode());
-        timeDisplayModeBox.setPrefWidth(220);
-
-        ComboBox<AircraftProfile> defaultAircraftBox = new ComboBox<>();
-        defaultAircraftBox.getItems().setAll(aircraftProfileRepository.loadProfiles());
-        defaultAircraftBox.setPrefWidth(260);
-        for (AircraftProfile profile : defaultAircraftBox.getItems()) {
-            if (profile.name().equalsIgnoreCase(appSettings.defaultAircraftName())) {
-                defaultAircraftBox.setValue(profile);
-                break;
-            }
-        }
-        if (defaultAircraftBox.getValue() == null && !defaultAircraftBox.getItems().isEmpty()) {
-            defaultAircraftBox.setValue(defaultAircraftBox.getItems().getFirst());
-        }
-
-        TextField warningVisibilityField = createInputField("Warning visibility SM", 160);
-        warningVisibilityField.setText(String.valueOf(appSettings.vfrWarningVisibilitySm()));
-        TextField warningCeilingField = createInputField("Warning ceiling ft", 160);
-        warningCeilingField.setText(String.valueOf(appSettings.vfrWarningCeilingFt()));
-        TextField cautionVisibilityField = createInputField("Caution visibility SM", 160);
-        cautionVisibilityField.setText(String.valueOf(appSettings.vfrCautionVisibilitySm()));
-        TextField cautionCeilingField = createInputField("Caution ceiling ft", 160);
-        cautionCeilingField.setText(String.valueOf(appSettings.vfrCautionCeilingFt()));
-        TextField densityCautionField = createInputField("Density caution ft", 160);
-        densityCautionField.setText(String.valueOf(appSettings.densityAltitudeCautionFt()));
-        TextField densityWarningField = createInputField("Density warning ft", 160);
-        densityWarningField.setText(String.valueOf(appSettings.densityAltitudeWarningFt()));
-        TextField taxiFuelField = createInputField("Taxi fuel gal", 160);
-        taxiFuelField.setText(formatOneDecimal(appSettings.taxiFuelGallons()));
-        TextField climbFuelField = createInputField("Climb fuel gal", 160);
-        climbFuelField.setText(formatOneDecimal(appSettings.climbFuelGallons()));
-        TextField groundspeedAdjustmentField = createInputField("Groundspeed adjustment kt", 160);
-        groundspeedAdjustmentField.setText(String.valueOf(appSettings.groundspeedAdjustmentKts()));
-
-        Label settingsStatus = createMutedLabel(settingsStatusMessage);
-        Button resetDefaultsButton = createGhostButton("Reset to Defaults");
-        Button saveSettingsButton = createPrimaryButton("Save Settings");
-        resetDefaultsButton.setOnAction(event -> {
-            homeAirportField.setText(defaultSettings.homeAirport());
-            themePresetBox.setValue(defaultSettings.themePreset());
-            temperatureUnitBox.setValue(defaultSettings.temperatureUnit());
-            distanceUnitBox.setValue(defaultSettings.distanceUnit());
-            windUnitBox.setValue(defaultSettings.windUnit());
-            altimeterUnitBox.setValue(defaultSettings.altimeterUnit());
-            timeDisplayModeBox.setValue(defaultSettings.timeDisplayMode());
-
-            AircraftProfile defaultProfile = defaultAircraftBox.getItems().stream()
-                    .filter(profile -> profile.name().equalsIgnoreCase(defaultSettings.defaultAircraftName()))
-                    .findFirst()
-                    .orElse(defaultAircraftBox.getItems().isEmpty() ? null : defaultAircraftBox.getItems().getFirst());
-            defaultAircraftBox.setValue(defaultProfile);
-
-            warningVisibilityField.setText(String.valueOf(defaultSettings.vfrWarningVisibilitySm()));
-            warningCeilingField.setText(String.valueOf(defaultSettings.vfrWarningCeilingFt()));
-            cautionVisibilityField.setText(String.valueOf(defaultSettings.vfrCautionVisibilitySm()));
-            cautionCeilingField.setText(String.valueOf(defaultSettings.vfrCautionCeilingFt()));
-            densityCautionField.setText(String.valueOf(defaultSettings.densityAltitudeCautionFt()));
-            densityWarningField.setText(String.valueOf(defaultSettings.densityAltitudeWarningFt()));
-            taxiFuelField.setText(formatOneDecimal(defaultSettings.taxiFuelGallons()));
-            climbFuelField.setText(formatOneDecimal(defaultSettings.climbFuelGallons()));
-            groundspeedAdjustmentField.setText(String.valueOf(defaultSettings.groundspeedAdjustmentKts()));
-
-            settingsStatusMessage = "";
-            settingsStatus.setText("Defaults restored in the form. Click Save Settings to apply them.");
-        });
-        saveSettingsButton.setOnAction(event -> {
-            try {
-                AircraftProfile defaultProfile = defaultAircraftBox.getValue();
-                String savedWeatherInput = weatherAirportInput == null ? "" : weatherAirportInput.getText();
-                String savedRouteDeparture = routeDepartureInput == null ? "" : routeDepartureInput.getText();
-                String savedRouteDestination = routeDestinationInput == null ? "" : routeDestinationInput.getText();
-                String savedRouteTime = routeDepartureTimeInput == null ? "" : routeDepartureTimeInput.getText();
-                AppSettings updatedSettings = new AppSettings(
-                        homeAirportField.getText().trim().toUpperCase(),
-                        defaultProfile == null ? "" : defaultProfile.name(),
-                        themePresetBox.getValue(),
-                        temperatureUnitBox.getValue(),
-                        distanceUnitBox.getValue(),
-                        windUnitBox.getValue(),
-                        altimeterUnitBox.getValue(),
-                        timeDisplayModeBox.getValue(),
-                        Double.parseDouble(taxiFuelField.getText().trim()),
-                        Double.parseDouble(climbFuelField.getText().trim()),
-                        Integer.parseInt(groundspeedAdjustmentField.getText().trim()),
-                        Float.parseFloat(warningVisibilityField.getText().trim()),
-                        Integer.parseInt(warningCeilingField.getText().trim()),
-                        Float.parseFloat(cautionVisibilityField.getText().trim()),
-                        Integer.parseInt(cautionCeilingField.getText().trim()),
-                        Integer.parseInt(densityCautionField.getText().trim()),
-                        Integer.parseInt(densityWarningField.getText().trim())
-                );
-
-                appSettings = updatedSettings;
-                themePalette = ThemePalette.forPreset(appSettings.themePreset());
-                settingsRepository.saveSettings(appSettings);
-                reloadAircraftProfiles(appSettings.defaultAircraftName());
-                invalidateAlternateSuggestions();
-                settingsStatusMessage = "Settings saved.";
-                rebuildScene(savedWeatherInput, savedRouteDeparture, savedRouteDestination, savedRouteTime);
-            } catch (NumberFormatException exception) {
-                settingsStatusMessage = "";
-                settingsStatus.setText("Use valid numbers for thresholds and route assumptions.");
-            }
-        });
-
-        GridPane defaultsGrid = new GridPane();
-        defaultsGrid.setHgap(14);
-        defaultsGrid.setVgap(12);
-        defaultsGrid.add(formLabel("Home Airport"), 0, 0);
-        defaultsGrid.add(homeAirportField, 1, 0);
-        defaultsGrid.add(formLabel("Default Aircraft"), 0, 1);
-        defaultsGrid.add(defaultAircraftBox, 1, 1);
-        defaultsGrid.add(formLabel("Theme"), 0, 2);
-        defaultsGrid.add(themePresetBox, 1, 2);
-        defaultsGrid.add(formLabel("Temperature Unit"), 0, 3);
-        defaultsGrid.add(temperatureUnitBox, 1, 3);
-        defaultsGrid.add(formLabel("Distance Unit"), 0, 4);
-        defaultsGrid.add(distanceUnitBox, 1, 4);
-        defaultsGrid.add(formLabel("Wind Unit"), 0, 5);
-        defaultsGrid.add(windUnitBox, 1, 5);
-        defaultsGrid.add(formLabel("Altimeter Unit"), 0, 6);
-        defaultsGrid.add(altimeterUnitBox, 1, 6);
-        defaultsGrid.add(formLabel("Time Display"), 0, 7);
-        defaultsGrid.add(timeDisplayModeBox, 1, 7);
-
-        GridPane thresholdsGrid = new GridPane();
-        thresholdsGrid.setHgap(14);
-        thresholdsGrid.setVgap(12);
-        thresholdsGrid.add(formLabel("VFR Warning Vis"), 0, 0);
-        thresholdsGrid.add(warningVisibilityField, 1, 0);
-        thresholdsGrid.add(formLabel("VFR Warning Ceiling"), 2, 0);
-        thresholdsGrid.add(warningCeilingField, 3, 0);
-        thresholdsGrid.add(formLabel("VFR Caution Vis"), 0, 1);
-        thresholdsGrid.add(cautionVisibilityField, 1, 1);
-        thresholdsGrid.add(formLabel("VFR Caution Ceiling"), 2, 1);
-        thresholdsGrid.add(cautionCeilingField, 3, 1);
-        thresholdsGrid.add(formLabel("DA Caution"), 0, 2);
-        thresholdsGrid.add(densityCautionField, 1, 2);
-        thresholdsGrid.add(formLabel("DA Warning"), 2, 2);
-        thresholdsGrid.add(densityWarningField, 3, 2);
-
-        GridPane planningGrid = new GridPane();
-        planningGrid.setHgap(14);
-        planningGrid.setVgap(12);
-        planningGrid.add(formLabel("Taxi Fuel"), 0, 0);
-        planningGrid.add(taxiFuelField, 1, 0);
-        planningGrid.add(formLabel("Climb Fuel"), 2, 0);
-        planningGrid.add(climbFuelField, 3, 0);
-        planningGrid.add(formLabel("Groundspeed Adj"), 0, 1);
-        planningGrid.add(groundspeedAdjustmentField, 1, 1);
-
-        VBox defaultsCard = createPanel(
-                "Defaults",
-                "Set values the app should restore at launch.",
-                defaultsGrid
-        );
-        VBox thresholdsCard = createPanel(
-                "Thresholds",
-                "These feed current VFR and density altitude advisories.",
-                thresholdsGrid
-        );
-        VBox planningCard = createPanel(
-                "Route Assumptions",
-                "Applied to direct-route fuel and ETA calculations for every aircraft profile.",
-                planningGrid
-        );
-
-        HBox settingsActions = new HBox(10, resetDefaultsButton, saveSettingsButton);
-        settingsActions.setAlignment(Pos.CENTER_LEFT);
-
-        VBox content = new VBox(16, sectionTitle, sectionSubtitle, defaultsCard, thresholdsCard, planningCard, settingsActions, settingsStatus);
-        content.setPadding(new Insets(24));
-
-        ScrollPane scrollPane = new ScrollPane(content);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
-        return scrollPane;
-    }
-
-    private ScrollPane buildAircraftTab() {
-        Label sectionTitle = createSectionTitle("Aircraft Hangar");
-        Label sectionSubtitle = createSectionSubtitle("Create reusable aircraft profiles for fuel planning and crosswind alerts.");
-
-        Button removeSelectedButton = createSecondaryButton("Remove Selected");
-        Label aircraftStatus = createMutedLabel("");
-
-        removeSelectedButton.setOnAction(event -> {
-            AircraftProfile selectedProfile = aircraftSelector.getValue();
-            if (selectedProfile == null) {
-                aircraftStatus.setText("Select a profile to remove.");
-                return;
-            }
-
-            aircraftProfileRepository.removeProfile(selectedProfile.name());
-            reloadAircraftProfiles(null);
-            aircraftStatus.setText("Removed profile: " + selectedProfile.name());
-            updateAircraftDisplays();
-        });
-
-        TextField nameField = createInputField("Aircraft name", 240);
-        TextField cruiseField = createInputField("Cruise speed (kts)", 160);
-        TextField burnField = createInputField("Fuel burn (gph)", 160);
-        TextField usableFuelField = createInputField("Usable fuel (gal)", 160);
-        TextField reserveField = createInputField("Reserve target (gal)", 160);
-        TextField crosswindField = createInputField("Max crosswind (kts)", 160);
-        TextArea notesArea = new TextArea();
-        notesArea.setPromptText("Notes, equipment, or planning caveats");
-        notesArea.setPrefRowCount(3);
-        notesArea.setWrapText(true);
-
-        Button saveButton = createPrimaryButton("Save Profile");
-        saveButton.setOnAction(event -> {
-            try {
-                AircraftProfile profile = new AircraftProfile(
-                        nameField.getText().trim(),
-                        Double.parseDouble(cruiseField.getText().trim()),
-                        Double.parseDouble(burnField.getText().trim()),
-                        Double.parseDouble(usableFuelField.getText().trim()),
-                        Double.parseDouble(reserveField.getText().trim()),
-                        Double.parseDouble(crosswindField.getText().trim()),
-                        notesArea.getText().trim()
-                );
-
-                if (profile.name().isBlank()) {
-                    aircraftStatus.setText("Aircraft name is required.");
-                    return;
-                }
-
-                aircraftProfileRepository.saveProfile(profile);
-                reloadAircraftProfiles(profile.name());
-                updateAircraftDisplays();
-                aircraftStatus.setText("Saved profile: " + profile.name());
-
-                nameField.clear();
-                cruiseField.clear();
-                burnField.clear();
-                usableFuelField.clear();
-                reserveField.clear();
-                crosswindField.clear();
-                notesArea.clear();
-            } catch (NumberFormatException exception) {
-                aircraftStatus.setText("Use valid numbers for speed, fuel, reserve, and crosswind limits.");
-            }
-        });
-
-        GridPane formGrid = new GridPane();
-        formGrid.setHgap(14);
-        formGrid.setVgap(12);
-        formGrid.add(formLabel("Aircraft"), 0, 0);
-        formGrid.add(nameField, 1, 0);
-        formGrid.add(formLabel("Cruise"), 0, 1);
-        formGrid.add(cruiseField, 1, 1);
-        formGrid.add(formLabel("Burn"), 2, 1);
-        formGrid.add(burnField, 3, 1);
-        formGrid.add(formLabel("Usable Fuel"), 0, 2);
-        formGrid.add(usableFuelField, 1, 2);
-        formGrid.add(formLabel("Reserve"), 2, 2);
-        formGrid.add(reserveField, 3, 2);
-        formGrid.add(formLabel("Max Crosswind"), 0, 3);
-        formGrid.add(crosswindField, 1, 3);
-        formGrid.add(formLabel("Notes"), 0, 4);
-        formGrid.add(notesArea, 1, 4, 3, 1);
-
-        VBox selectionCard = createPanel(
-                "Active Profile",
-                "Switch profiles globally from the header or manage the active one here.",
-                new HBox(10, aircraftSelectorPlaceholder(), removeSelectedButton),
-                aircraftSummaryBox
-        );
-
-        VBox formCard = createPanel(
-                "Create or Update Profile",
-                "Use real POH numbers or your own conservative planning values.",
-                formGrid,
-                saveButton,
-                aircraftStatus
-        );
-
-        VBox content = new VBox(16, sectionTitle, sectionSubtitle, selectionCard, formCard);
-        content.setPadding(new Insets(24));
-
-        ScrollPane scrollPane = new ScrollPane(content);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
-        return scrollPane;
-    }
-    private VBox buildAirportCard(AirportWeather airportWeather) {
-        AircraftProfile selectedProfile = aircraftSelector.getValue();
-        AirportInfo airportInfo = airportWeather.airportInfo();
-        MetarData metar = airportWeather.metar();
-        VBox card = new VBox(12);
-        card.setPadding(new Insets(20));
-        card.setStyle(panelStyle(themePalette.surfaceBackground(), true));
-
-        String categoryColor = categoryColor(metar.flightCategory());
-
-        Label airportLabel = new Label(metar.airportId());
-        airportLabel.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 28px; -fx-font-weight: bold; -fx-letter-spacing: 0.7px;");
-
-        Label categoryBadge = createBadge(metar.flightCategory(), categoryColor);
-        Label profileBadge = selectedProfile == null
-                ? createBadge("No aircraft selected", themePalette.unknownGray())
-                : createBadge("Aircraft XW limit " + formatSpeed(selectedProfile.maxCrosswindKts()), themePalette.accentGold());
-
-        Label mastheadLabel = new Label("AIRPORT BRIEFING");
-        mastheadLabel.setStyle("-fx-text-fill: " + themePalette.unknownGray() + "; -fx-font-size: 10px; -fx-font-weight: bold; -fx-letter-spacing: 1.1px;");
-
-        HBox badges = new HBox(8, categoryBadge, profileBadge);
-        badges.setAlignment(Pos.CENTER_LEFT);
-
-        Button favoriteButton = createGhostButton(favoritesRepository.isFavorite(metar.airportId()) ? "Saved" : "Save");
-        favoriteButton.setOnAction(event -> toggleFavorite(metar.airportId(), favoriteButton));
-
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
-        Label nameLabel = makeInfoLabel(metar.airportName());
-        nameLabel.setStyle("-fx-text-fill: " + themePalette.textMuted() + "; -fx-font-size: 15px;");
-
-        VBox titleBlock = new VBox(6, mastheadLabel, airportLabel, nameLabel, badges);
-        titleBlock.setMaxWidth(Double.MAX_VALUE);
-
-        VBox rightBlock = new VBox(
-                8,
-                createSectionStripCard("Observed", formatObservationTime(metar.observationTime())),
-                favoriteButton
-        );
-        rightBlock.setAlignment(Pos.TOP_RIGHT);
-
-        HBox header = new HBox(16, titleBlock, spacer, rightBlock);
-        header.setAlignment(Pos.TOP_LEFT);
-
-        VBox stationBanner = createInsetBanner(
-                "Current flight category",
-                metar.flightCategory() + "  |  " + vfrStatusText(flightConditionEvaluator.assessVfr(metar, appSettings).level()),
-                categoryColor
-        );
-
-        FlowPane metricStrip = new FlowPane();
-        metricStrip.setHgap(10);
-        metricStrip.setVgap(10);
-        metricStrip.getChildren().addAll(
-                createMetricCard("Wind", metar.windGust() > 0
-                        ? formatWind(metar.windDir(), metar.windSpeed(), metar.windGust())
-                        : formatWind(metar.windDir(), metar.windSpeed(), 0), categoryColor),
-                createMetricCard("Visibility", formatVisibility(metar.visibilitySm()), themePalette.accentBlue()),
-                createMetricCard("Altimeter", formatAltimeter(metar.altimeterInHg()), themePalette.accentGold()),
-                createMetricCard("Temperature", formatTemperature(metar.tempC()), themePalette.successGreen())
-        );
-
-        VfrAssessment vfrAssessment = flightConditionEvaluator.assessVfr(metar, appSettings);
-        Label vfrLabel = createStatusLine(vfrAssessment.message(), vfrAssessment.level());
-
-        Label detailsLabel = makeInfoLabel(
-                "Clouds: " + metar.cloudLayersSummary() + "  |  Observation: " + formatObservationTime(metar.observationTime())
-        );
-
-        VBox airportBriefingSection = buildAirportBriefingSection(airportInfo, metar);
-        VBox trendSection = buildTrendSection(airportWeather);
-        VBox tafSection = buildTafSection(airportWeather);
-        VBox runwaySection = buildRunwaySection(metar, airportWeather.runways(), categoryColor, selectedProfile);
-
-        Label rawLabel = makeInfoLabel("Raw METAR: " + metar.rawObservation());
-        rawLabel.setStyle(monospaceMutedStyle());
-        rawLabel.setWrapText(true);
-
-        card.getChildren().addAll(header, stationBanner, metricStrip, vfrLabel, detailsLabel, airportBriefingSection, trendSection, tafSection, runwaySection, rawLabel);
-        return card;
-    }
-
-    private VBox buildAirportBriefingSection(AirportInfo airportInfo, MetarData metar) {
-        VBox section = new VBox(6);
-        section.getChildren().add(new Separator());
-        section.getChildren().add(createSubsectionTitle("Airport Briefing"));
-
-        if (airportInfo == null) {
-            section.getChildren().add(createMutedLabel("Airport details unavailable for this station."));
-            return section;
-        }
-
-        String airportType = airportInfo.airportType().replace('_', ' ');
-        Label basics = makeInfoLabel(
-                airportInfo.municipality() + ", " + airportInfo.isoRegion() + "  |  " +
-                        airportType + "  |  Field elev " + airportInfo.elevationFt() + " ft"
-        );
-        basics.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 12px;");
-        section.getChildren().add(basics);
-
-        DensityAltitudeAssessment densityAssessment = densityAltitudeService.assess(airportInfo, metar, appSettings);
-        if (densityAssessment != null) {
-            Label densityLine = createStatusLine(
-                    densityAssessment.message()
-                            + " Density altitude "
-                            + densityAssessment.densityAltitudeFt()
-                            + " ft (pressure altitude "
-                            + densityAssessment.pressureAltitudeFt()
-                            + " ft).",
-                    densityAssessment.level()
-            );
-            section.getChildren().add(densityLine);
-        }
-
-        LocalDate briefingDate = extractUtcDate(metar.observationTime());
-        SolarTimes solarTimes = solarCalculatorService.calculate(airportInfo, briefingDate);
-        if (solarTimes != null) {
-            LocalDateTime observationTimeUtc = extractUtcDateTime(metar.observationTime());
-            String solarSummary = formatSolarSummary(solarTimes);
-            if (observationTimeUtc != null && observationTimeUtc.toLocalDate().equals(solarTimes.dateUtc())) {
-                solarSummary += "  |  Observation " + (solarCalculatorService.isDaylight(solarTimes, observationTimeUtc)
-                        ? "in daylight"
-                        : "at night");
-            }
-            section.getChildren().add(createMutedLabel(solarSummary));
-        }
-
-        section.getChildren().add(buildChartResourcesBox(metar.airportId()));
-
-        return section;
-    }
-
-    private VBox buildChartResourcesBox(String airportId) {
-        VBox chartBox = new VBox(6);
-        chartBox.getChildren().add(createSubsectionTitle("Chart Resources"));
-
-        chartBox.getChildren().add(buildAirportDiagramPreviewBox(airportId));
-
-        Button diagramButton = createSecondaryButton("Airport Diagram");
-        diagramButton.setOnAction(event -> openExternalUrl(faaChartLinkService.buildAirportDiagramUrl(airportId)));
-
-        Button supplementButton = createSecondaryButton("Chart Supplement");
-        supplementButton.setOnAction(event -> openExternalUrl(faaChartLinkService.buildChartSupplementUrl(airportId)));
-
-        HBox actions = new HBox(10, diagramButton, supplementButton);
-        Label hint = createMutedLabel(
-                "Opens official FAA chart results in your browser. " + faaChartLinkService.airportSearchHint(airportId)
-        );
-        chartBox.getChildren().addAll(actions, hint);
-        return chartBox;
-    }
-
-    private VBox buildTrendSection(AirportWeather airportWeather) {
-        VBox section = new VBox(6);
-        section.getChildren().add(new Separator());
-        section.getChildren().add(createSubsectionTitle("Trend Snapshot"));
-
-        String airportId = normalizeAirportId(airportWeather.metar().airportId());
-        List<MetarData> history = metarHistoryCache.getOrDefault(airportId, airportWeather.metarHistory());
-        String historyStatus = metarHistoryStatusCache.get(airportId);
-
-        if (history.isEmpty()) {
-            if (historyStatus != null) {
-                section.getChildren().add(createMutedLabel(historyStatus));
-                return section;
-            }
-
-            metarHistoryStatusCache.put(airportId, "Loading recent METAR history...");
-            loadMetarHistoryAsync(airportId);
-            section.getChildren().add(createMutedLabel("Loading recent METAR history..."));
-            return section;
-        }
-
-        MetarTrendSummary trendSummary = metarTrendService.summarize(history, appSettings);
-        if (trendSummary == null) {
-            section.getChildren().add(createMutedLabel("Not enough METAR history yet for a trend view."));
-            return section;
-        }
-
-        section.getChildren().add(createStatusLine(trendSummary.headline(), trendSummary.level()));
-        section.getChildren().add(createMutedLabel(trendSummary.categorySummary()));
-        section.getChildren().add(createMutedLabel(trendSummary.visibilitySummary()));
-        section.getChildren().add(createMutedLabel(trendSummary.ceilingSummary()));
-
-        VBox recentBox = new VBox(4);
-        for (MetarData observation : trendSummary.recentObservations()) {
-            Label line = createMutedLabel(
-                    formatObservationTime(observation.observationTime())
-                            + "  |  " + observation.flightCategory()
-                            + "  |  Vis " + formatVisibility(observation.visibilitySm())
-            );
-            recentBox.getChildren().add(line);
-        }
-        section.getChildren().add(recentBox);
-        return section;
-    }
-
-    private VBox buildAirportDiagramPreviewBox(String airportId) {
-        VBox previewBox = new VBox(6);
-        String normalizedAirportId = normalizeAirportId(airportId);
-
-        Label previewTitle = createMutedLabel("Airport diagram preview");
-        ImageView imageView = new ImageView();
-        imageView.setPreserveRatio(true);
-        imageView.setFitWidth(250);
-        imageView.setSmooth(true);
-
-        Label statusLabel = createMutedLabel("Loading FAA airport diagram preview...");
-
-        VBox imageFrame = new VBox(8, imageView, statusLabel);
-        imageFrame.setPadding(new Insets(10));
-        imageFrame.setStyle(
-                "-fx-background-color: " + themePalette.metricBackground() + "; -fx-border-color: " + themePalette.metricBorder() + "; " +
-                        "-fx-background-radius: 14; -fx-border-radius: 14;"
-        );
-
-        Image cachedImage = airportDiagramImageCache.get(normalizedAirportId);
-        if (cachedImage != null) {
-            imageView.setImage(cachedImage);
-            statusLabel.setText("Click the image to open the full FAA PDF.");
-            imageView.setOnMouseClicked(event -> openAirportDiagramPdf(normalizedAirportId));
-        } else if (airportDiagramStatusCache.containsKey(normalizedAirportId)) {
-            statusLabel.setText(airportDiagramStatusCache.get(normalizedAirportId));
-        } else {
-            if (airportDiagramLoading.add(normalizedAirportId)) {
-                runAsync(
-                        () -> airportDiagramService.loadPreview(normalizedAirportId),
-                        preview -> {
-                            airportDiagramLoading.remove(normalizedAirportId);
-                            if (preview == null) {
-                                airportDiagramStatusCache.put(normalizedAirportId, "FAA airport diagram preview unavailable for this airport.");
-                            } else {
-                                try {
-                                    Image image = new Image(preview.imagePath().toUri().toString(), true);
-                                    airportDiagramImageCache.put(normalizedAirportId, image);
-                                    airportDiagramStatusCache.remove(normalizedAirportId);
-                                } catch (Exception exception) {
-                                    airportDiagramStatusCache.put(normalizedAirportId, "Diagram loaded, but the preview image could not be displayed.");
-                                }
-                            }
-                            rerenderWeatherCards();
-                            rerenderRouteResults();
-                        },
-                        throwable -> {
-                            airportDiagramLoading.remove(normalizedAirportId);
-                            airportDiagramStatusCache.put(normalizedAirportId, "Could not load FAA diagram preview: " + throwable.getMessage());
-                            rerenderWeatherCards();
-                            rerenderRouteResults();
-                        }
-                );
-            }
-        }
-
-        previewBox.getChildren().addAll(previewTitle, imageFrame);
-        return previewBox;
-    }
-
-    private VBox buildTafSection(AirportWeather airportWeather) {
-        VBox section = new VBox(6);
-        section.getChildren().add(new Separator());
-        section.getChildren().add(createSubsectionTitle("TAF Outlook"));
-
-        TafData taf = airportWeather.taf();
-        if (taf == null) {
-            String tafStatus = airportWeather.tafStatusMessage();
-            section.getChildren().add(createMutedLabel(
-                    tafStatus == null || tafStatus.isBlank()
-                            ? "TAF unavailable for this airport."
-                            : tafStatus
-            ));
-            return section;
-        }
-
-        VfrAssessment tafAssessment = flightConditionEvaluator.assessTaf(taf, appSettings);
-        section.getChildren().add(createStatusLine(
-                tafAssessment == null ? "Forecast available." : tafAssessment.message(),
-                tafAssessment == null ? VfrStatusLevel.VFR : tafAssessment.level()
-        ));
-
-        Label validityLabel = createMutedLabel("Issued " + taf.issueTime() + "  |  Valid " + taf.validPeriod());
-        section.getChildren().add(validityLabel);
-
-        int periodsToShow = Math.min(3, taf.periods().size());
-        for (int index = 0; index < periodsToShow; index++) {
-            TafPeriod period = taf.periods().get(index);
-            VfrAssessment assessment = assessTafPeriod(period);
-            Label periodLabel = makeInfoLabel(formatTafPeriod(period, assessment));
-            periodLabel.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 12px;");
-            periodLabel.setWrapText(true);
-            section.getChildren().add(periodLabel);
-        }
-
-        if (taf.periods().size() > periodsToShow) {
-            section.getChildren().add(createMutedLabel("Additional forecast groups omitted for brevity."));
-        }
-
-        Label rawTafLabel = makeInfoLabel("Raw TAF: " + taf.rawText());
-        rawTafLabel.setStyle(monospaceMutedStyle());
-        rawTafLabel.setWrapText(true);
-        section.getChildren().add(rawTafLabel);
-        return section;
-    }
-
-    private VBox buildRunwaySection(MetarData metar, List<Runway> runways, String accentColor, AircraftProfile aircraftProfile) {
-        VBox section = new VBox(6);
-        section.getChildren().add(new Separator());
-        section.getChildren().add(createSubsectionTitle("Runway Suitability"));
-
-        if (runways.isEmpty()) {
-            Label noData = createMutedLabel("Runway data not available. Enter a runway heading manually.");
-            TextField manualInput = createInputField("ex: 17", 90);
-            Label resultLabel = createMutedLabel("");
-            Button calculateButton = createSecondaryButton("Check");
-
-            calculateButton.setOnAction(event -> {
-                try {
-                    int runway = Integer.parseInt(manualInput.getText().trim());
-                    if (runway < 1 || runway > 36) {
-                        resultLabel.setText("Enter a runway from 1 to 36.");
-                        return;
-                    }
-
-                    CrosswindComponents components = CrosswindCalculator.calculate(runway * 10, metar.windDir(), metar.windSpeed());
-                    String result = runwayAnalysisService.formatManualResult(components);
-                    if (aircraftProfile != null && Math.abs(components.crosswindKts()) > aircraftProfile.maxCrosswindKts()) {
-                        result += "  |  Above " + aircraftProfile.name() + " limit";
-                    }
-                    resultLabel.setText(result);
-                } catch (NumberFormatException exception) {
-                    resultLabel.setText("Use a numeric runway heading.");
-                }
-            });
-
-            section.getChildren().addAll(noData, new HBox(10, manualInput, calculateButton), resultLabel);
-            return section;
-        }
-
-        for (RunwayAnalysis analysis : runwayAnalysisService.analyze(metar, runways, aircraftProfile)) {
-            String headwindLabel = analysis.components().headwindKts() >= 0
-                    ? "HW " + formatSpeedValue(analysis.components().headwindKts())
-                    : "TW " + formatSpeedValue(Math.abs(analysis.components().headwindKts()));
-            String crosswindLabel = "XW " + formatSpeedValue(Math.abs(analysis.components().crosswindKts())) + " "
-                    + speedUnitShortLabel() + " "
-                    + (analysis.components().crosswindKts() >= 0 ? "R" : "L");
-
-            String text = analysis.bestOption()
-                    ? "Best runway " + analysis.runway().ident() + "  |  " + headwindLabel + "  |  " + crosswindLabel
-                    : "Runway " + analysis.runway().ident() + "  |  " + headwindLabel + "  |  " + crosswindLabel;
-
-            if (analysis.exceedsAircraftLimit() && aircraftProfile != null) {
-                text += "  |  Above " + formatSpeed(aircraftProfile.maxCrosswindKts()) + " limit";
-            }
-
-            Label runwayLabel = new Label(text);
-            runwayLabel.setWrapText(true);
-            runwayLabel.setStyle(analysis.exceedsAircraftLimit()
-                    ? "-fx-text-fill: " + themePalette.warningRed() + "; -fx-font-size: 12px; -fx-font-weight: bold;"
-                    : analysis.bestOption()
-                    ? "-fx-text-fill: " + accentColor + "; -fx-font-size: 12px; -fx-font-weight: bold;"
-                    : "-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 12px;");
-            section.getChildren().add(runwayLabel);
-        }
-
-        return section;
-    }
-    private void rerenderWeatherCards() {
-        weatherCardsContainer.getChildren().setAll(
-                latestWeatherResults.stream().map(this::buildAirportCard).collect(Collectors.toList())
-        );
-    }
-
-    private void rerenderRouteResults() {
-        routeResultsBox.getChildren().clear();
-        if (latestRouteResults.isEmpty() || latestRouteDeparture == null || latestRouteDestination == null) {
-            return;
-        }
-
-        AircraftProfile aircraftProfile = aircraftSelector.getValue();
-        RouteAssessment assessment = flightConditionEvaluator.assessRoute(
-                latestRouteResults,
-                latestRouteDeparture,
-                latestRouteDestination,
-                appSettings
-        );
-        VBox routeBanner = createBanner(assessment.message(), assessment.level());
-
-        LocalDateTime departureTimeUtc = null;
-        TimedRouteAssessment timedRouteAssessment = null;
-        if (aircraftProfile != null) {
-            AirportInfo departureAirport = airportsRepository.findAirportByIcao(latestRouteDeparture);
-            AirportInfo destinationAirport = airportsRepository.findAirportByIcao(latestRouteDestination);
-            AirportWeather departureWeather = latestRouteResults.stream()
-                    .filter(weather -> weather.metar().airportId().equalsIgnoreCase(latestRouteDeparture))
-                    .findFirst()
-                    .orElse(null);
-            AirportWeather destinationWeather = latestRouteResults.stream()
-                    .filter(weather -> weather.metar().airportId().equalsIgnoreCase(latestRouteDestination))
-                    .findFirst()
-                    .orElse(null);
-            RoutePlan routePlan = flightPlanningService.planDirectRoute(departureAirport, destinationAirport, aircraftProfile, appSettings);
-            if (routePlan != null) {
-                departureTimeUtc = getPlannedDepartureTimeUtc();
-                if (departureTimeUtc != null) {
-                    timedRouteAssessment = flightConditionEvaluator.assessTimedRoute(
-                            departureWeather,
-                            destinationWeather,
-                            departureTimeUtc,
-                            departureTimeUtc.plusMinutes((long) Math.round(routePlan.estimatedTimeHours() * 60)),
-                            appSettings
-                    );
-                    routeBanner = createBanner(timedRouteAssessment.message(), timedRouteAssessment.level());
-                }
-                routeResultsBox.getChildren().add(buildRouteDecisionDashboard(
-                        routeBanner,
-                        routePlan,
-                        aircraftProfile,
-                        departureWeather,
-                        destinationWeather,
-                        assessment,
-                        timedRouteAssessment
-                ));
-                routeResultsBox.getChildren().add(buildOperationalAlertsCard(
-                        routePlan,
-                        aircraftProfile,
-                        departureWeather,
-                        destinationWeather,
-                        assessment,
-                        timedRouteAssessment
-                ));
-            } else {
-                routeResultsBox.getChildren().add(routeBanner);
-            }
-        } else {
-            routeResultsBox.getChildren().add(routeBanner);
-            routeResultsBox.getChildren().add(createMutedLabel("Select an aircraft profile to unlock fuel and endurance planning."));
-        }
-
-        if (timedRouteAssessment != null && timedRouteAssessment.level() != RouteDecisionLevel.GO) {
-            maybeLoadAlternateSuggestions();
-        } else if (assessment.level() != RouteDecisionLevel.GO) {
-            maybeLoadAlternateSuggestions();
-        }
-
-        if (alternateSuggestionsLoading) {
-            routeResultsBox.getChildren().add(createPanel(
-                    "Alternate Airports",
-                    "Searching nearby airports with better conditions and runway fit.",
-                    createMutedLabel("Loading alternates...")
-            ));
-        } else if (!latestAlternateOptions.isEmpty()) {
-            routeResultsBox.getChildren().add(buildAlternatesCard());
-        } else if (!alternateSuggestionsStatus.isBlank()) {
-            routeResultsBox.getChildren().add(createPanel(
-                    "Alternate Airports",
-                    "Nearby fallback options for the destination.",
-                    createMutedLabel(alternateSuggestionsStatus)
-            ));
-        }
-
-        routeResultsBox.getChildren().add(buildRouteAirportDetailsCard());
-    }
-
-    private VBox buildRouteDecisionDashboard(
-            VBox routeBanner,
-            RoutePlan routePlan,
-            AircraftProfile aircraftProfile,
-            AirportWeather departureWeather,
-            AirportWeather destinationWeather,
-            RouteAssessment assessment,
-            TimedRouteAssessment timedRouteAssessment
-    ) {
-        VBox summaryCard = buildRouteSummaryCard(routePlan, aircraftProfile);
-        summaryCard.setMaxWidth(Double.MAX_VALUE);
-
-        VBox timingCard = createPanel(
-                "Decision Snapshot",
-                "Fast route-level view before reviewing airport detail sections.",
-                routeBanner,
-                buildDecisionSnapshotMetrics(routePlan, departureWeather, destinationWeather, assessment, timedRouteAssessment)
-        );
-        timingCard.setPrefWidth(340);
-
-        VBox routeRibbon = createInsetBanner(
-                "Mission profile",
-                routePlan.departureAirport().ident() + " -> " + routePlan.destinationAirport().ident() + "  |  " + aircraftProfile.name(),
-                decisionAccentColor(timedRouteAssessment == null ? assessment.level() : timedRouteAssessment.level())
-        );
-
-        HBox row = new HBox(16, summaryCard, timingCard);
-        HBox.setHgrow(summaryCard, Priority.ALWAYS);
-
-        VBox wrapper = new VBox(14, routeRibbon, row);
-        return wrapper;
-    }
-
-    private FlowPane buildDecisionSnapshotMetrics(
-            RoutePlan routePlan,
-            AirportWeather departureWeather,
-            AirportWeather destinationWeather,
-            RouteAssessment assessment,
-            TimedRouteAssessment timedRouteAssessment
-    ) {
-        FlowPane metrics = new FlowPane();
-        metrics.setHgap(10);
-        metrics.setVgap(10);
-
-        VfrAssessment departureCurrent = departureWeather == null ? null : flightConditionEvaluator.assessVfr(departureWeather.metar(), appSettings);
-        VfrAssessment destinationCurrent = destinationWeather == null ? null : flightConditionEvaluator.assessVfr(destinationWeather.metar(), appSettings);
-
-        metrics.getChildren().add(createMetricCard(
-                "Departure",
-                departureCurrent == null ? "N/A" : departureCurrent.level().name(),
-                statusAccentColor(departureCurrent == null ? VfrStatusLevel.WARNING : departureCurrent.level())
-        ));
-        metrics.getChildren().add(createMetricCard(
-                "Destination",
-                destinationCurrent == null ? "N/A" : destinationCurrent.level().name(),
-                statusAccentColor(destinationCurrent == null ? VfrStatusLevel.WARNING : destinationCurrent.level())
-        ));
-
-        if (timedRouteAssessment != null) {
-            metrics.getChildren().add(createMetricCard(
-                    "Planned Window",
-                    timedRouteAssessment.level().name(),
-                    decisionAccentColor(timedRouteAssessment.level())
-            ));
-        } else {
-            metrics.getChildren().add(createMetricCard(
-                    "Route Outlook",
-                    assessment.level().name(),
-                    decisionAccentColor(assessment.level())
-            ));
-        }
-
-        metrics.getChildren().add(createMetricCard(
-                "Alternates",
-                latestAlternateOptions.isEmpty() ? "None" : String.valueOf(latestAlternateOptions.size()),
-                latestAlternateOptions.isEmpty() ? themePalette.textMuted() : themePalette.cautionOrange()
-        ));
-
-        return metrics;
-    }
-
-    private VBox buildRouteAirportDetailsCard() {
-        AirportWeather departureWeather = findRouteWeather(latestRouteDeparture);
-        AirportWeather destinationWeather = findRouteWeather(latestRouteDestination);
-
-        VBox departureCard = buildCompactRouteAirportCard("Departure Detail", departureWeather);
-        VBox destinationCard = buildCompactRouteAirportCard("Destination Detail", destinationWeather);
-
-        HBox row = new HBox(16, departureCard, destinationCard);
-        HBox.setHgrow(departureCard, Priority.ALWAYS);
-        HBox.setHgrow(destinationCard, Priority.ALWAYS);
-
-        return createPanel(
-                "Airport Details",
-                "Expanded weather, runway, and chart context for each end of the route.",
-                row
-        );
-    }
-
-    private VBox buildCompactRouteAirportCard(String title, AirportWeather airportWeather) {
-        if (airportWeather == null) {
-            return createPanel(title, "No airport data available.", createMutedLabel("This side of the route could not be loaded."));
-        }
-
-        VBox card = new VBox(10);
-        card.setPadding(new Insets(18));
-        card.setStyle(panelStyle(themePalette.surfaceBackground(), true));
-
-        MetarData metar = airportWeather.metar();
-        AircraftProfile selectedProfile = aircraftSelector.getValue();
-
-        Label titleLabel = new Label(title.toUpperCase());
-        titleLabel.setStyle("-fx-text-fill: " + themePalette.unknownGray() + "; -fx-font-size: 10px; -fx-font-weight: bold; -fx-letter-spacing: 1.0px;");
-
-        Label airportLabel = new Label(metar.airportId() + " - " + metar.airportName());
-        airportLabel.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 20px; -fx-font-weight: bold;");
-        airportLabel.setWrapText(true);
-
-        HBox badges = new HBox(8, createBadge(metar.flightCategory(), categoryColor(metar.flightCategory())));
-        if (selectedProfile != null) {
-            badges.getChildren().add(createBadge("XW " + formatSpeed(selectedProfile.maxCrosswindKts()), themePalette.accentGold()));
-        }
-
-        FlowPane metrics = new FlowPane();
-        metrics.setHgap(10);
-        metrics.setVgap(10);
-        metrics.getChildren().addAll(
-                createMetricCard("Wind", metar.windGust() > 0
-                        ? formatCompactWind(metar.windDir(), metar.windSpeed(), metar.windGust())
-                        : formatCompactWind(metar.windDir(), metar.windSpeed(), 0), categoryColor(metar.flightCategory())),
-                createMetricCard("Vis", formatVisibility(metar.visibilitySm()), themePalette.accentBlue()),
-                createMetricCard("Alt", formatAltimeter(metar.altimeterInHg()), themePalette.accentGold()),
-                createMetricCard("Temp", formatTemperature(metar.tempC()), themePalette.successGreen())
-        );
-
-        VBox sections = new VBox(
-                10,
-                buildAirportBriefingSection(airportWeather.airportInfo(), metar),
-                buildTrendSection(airportWeather),
-                buildTafSection(airportWeather),
-                buildRunwaySection(metar, airportWeather.runways(), categoryColor(metar.flightCategory()), selectedProfile)
-        );
-
-        VBox masthead = createInsetBanner(
-                title,
-                metar.flightCategory() + "  |  " + formatObservationTime(metar.observationTime()),
-                categoryColor(metar.flightCategory())
-        );
-
-        card.getChildren().addAll(titleLabel, airportLabel, badges, masthead, metrics, sections);
-        return card;
-    }
-
-    private VBox buildAlternatesCard() {
-        VBox alternatesList = new VBox(10);
-        AircraftProfile selectedAircraft = aircraftSelector.getValue();
-
-        for (AlternateAirportOption option : latestAlternateOptions) {
-            AirportWeather weather = option.airportWeather();
-            String summary = weather.airportInfo() == null
-                    ? weather.metar().airportId()
-                    : weather.airportInfo().ident() + " - " + weather.airportInfo().name();
-
-            Label title = new Label(summary);
-            title.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 14px; -fx-font-weight: bold;");
-
-            Label badges = new Label(
-                    weather.metar().flightCategory() + "  |  "
-                            + formatDistance(option.distanceFromDestinationNm())
-                            + " from destination  |  "
-                            + option.vfrAssessment().level()
-            );
-            badges.setStyle("-fx-text-fill: " + themePalette.textMuted() + "; -fx-font-size: 12px;");
-
-            String runwayLine = "No runway suitability data available.";
-            List<RunwayAnalysis> runwayAnalysis = runwayAnalysisService.analyze(weather.metar(), weather.runways(), selectedAircraft);
-            if (!runwayAnalysis.isEmpty()) {
-                RunwayAnalysis best = runwayAnalysis.getFirst();
-                runwayLine = "Best runway " + best.runway().ident()
-                        + " with crosswind "
-                        + formatSpeed(Math.abs(best.components().crosswindKts()));
-                if (best.exceedsAircraftLimit() && selectedAircraft != null) {
-                    runwayLine += " (above selected aircraft limit)";
-                }
-            }
-
-            Label summaryLabel = createMutedLabel(option.summary());
-            Label runwayLabel = createMutedLabel(runwayLine);
-
-            VBox optionCard = new VBox(4, title, badges, summaryLabel, runwayLabel);
-            optionCard.setPadding(new Insets(12));
-            optionCard.setStyle(
-                    "-fx-background-color: " + themePalette.insetBackground() + "; -fx-border-color: " + themePalette.insetBorder() + "; " +
-                            "-fx-background-radius: 14; -fx-border-radius: 14;"
-            );
-            alternatesList.getChildren().add(optionCard);
-        }
-
-        return createPanel(
-                "Alternate Airports",
-                "Nearby options ranked by weather and runway fit.",
-                alternatesList
-        );
-    }
-
-    private VBox buildOperationalAlertsCard(
-            RoutePlan routePlan,
-            AircraftProfile aircraftProfile,
-            AirportWeather departureWeather,
-            AirportWeather destinationWeather,
-            RouteAssessment routeAssessment,
-            TimedRouteAssessment timedRouteAssessment
-    ) {
-        List<OperationalAlert> alerts = collectRouteOperationalAlerts(
-                routePlan,
-                aircraftProfile,
-                departureWeather,
-                destinationWeather,
-                routeAssessment,
-                timedRouteAssessment
-        );
-
-        if (alerts.isEmpty()) {
-            return createPanel(
-                    "Operational Alerts",
-                    "CloudDeck summarizes route-specific risks here.",
-                    createMutedLabel("No additional operational alerts for the current assumptions.")
-            );
-        }
-
-        VBox alertList = new VBox(10);
-        for (OperationalAlert alert : alerts) {
-            Label title = new Label(alert.title());
-            title.setWrapText(true);
-            title.setStyle(switch (alert.level()) {
-                case WARNING -> "-fx-text-fill: " + themePalette.warningRed() + "; -fx-font-size: 13px; -fx-font-weight: bold;";
-                case CAUTION -> "-fx-text-fill: " + themePalette.cautionOrange() + "; -fx-font-size: 13px; -fx-font-weight: bold;";
-                case VFR -> "-fx-text-fill: " + themePalette.successGreen() + "; -fx-font-size: 13px; -fx-font-weight: bold;";
-            });
-
-            Label detail = createMutedLabel(alert.detail());
-            VBox item = new VBox(4, title, detail);
-            item.setPadding(new Insets(12));
-            item.setStyle(
-                    "-fx-background-color: " + themePalette.metricBackground() + "; -fx-border-color: " + themePalette.metricBorder() + "; " +
-                            "-fx-background-radius: 14; -fx-border-radius: 14;"
-            );
-            alertList.getChildren().add(item);
-        }
-
-        return createPanel(
-                "Operational Alerts",
-                "Centralized warnings for weather, runway fit, fuel, and daylight timing.",
-                alertList
-        );
-    }
-
-    private List<OperationalAlert> collectRouteOperationalAlerts(
-            RoutePlan routePlan,
-            AircraftProfile aircraftProfile,
-            AirportWeather departureWeather,
-            AirportWeather destinationWeather,
-            RouteAssessment routeAssessment,
-            TimedRouteAssessment timedRouteAssessment
-    ) {
-        List<RunwayAnalysis> departureRunways = departureWeather == null
-                ? List.of()
-                : runwayAnalysisService.analyze(departureWeather.metar(), departureWeather.runways(), aircraftProfile);
-        List<RunwayAnalysis> destinationRunways = destinationWeather == null
-                ? List.of()
-                : runwayAnalysisService.analyze(destinationWeather.metar(), destinationWeather.runways(), aircraftProfile);
-
-        boolean departureInDaylight = true;
-        boolean arrivalInDaylight = true;
-        if (routePlan != null) {
-            LocalDateTime departureTimeUtc = getPlannedDepartureTimeUtc();
-            LocalDateTime arrivalTimeUtc = departureTimeUtc == null
-                    ? null
-                    : departureTimeUtc.plusMinutes((long) Math.round(routePlan.estimatedTimeHours() * 60));
-            if (departureTimeUtc != null) {
-                SolarTimes departureSolar = solarCalculatorService.calculate(routePlan.departureAirport(), departureTimeUtc.toLocalDate());
-                if (departureSolar != null) {
-                    departureInDaylight = solarCalculatorService.isDaylight(departureSolar, departureTimeUtc);
-                }
-            }
-            if (arrivalTimeUtc != null) {
-                SolarTimes destinationSolar = solarCalculatorService.calculate(routePlan.destinationAirport(), arrivalTimeUtc.toLocalDate());
-                if (destinationSolar != null) {
-                    arrivalInDaylight = solarCalculatorService.isDaylight(destinationSolar, arrivalTimeUtc);
-                }
-            }
-        }
-
-        return operationalAlertService.buildRouteAlerts(
-                routePlan,
-                aircraftProfile,
-                departureWeather,
-                destinationWeather,
-                departureRunways,
-                destinationRunways,
-                routeAssessment,
-                timedRouteAssessment,
-                departureInDaylight,
-                arrivalInDaylight,
-                !latestAlternateOptions.isEmpty(),
-                appSettings
-        );
-    }
-
-    private VBox buildRouteSummaryCard(RoutePlan routePlan, AircraftProfile aircraftProfile) {
-        FlowPane metrics = new FlowPane();
-        metrics.setHgap(12);
-        metrics.setVgap(12);
-        metrics.getChildren().addAll(
-                createMetricCard("Distance", formatDistance(routePlan.distanceNm()), themePalette.accentBlue()),
-                createMetricCard("Groundspeed", formatSpeed(routePlan.groundspeedKts()), themePalette.cautionOrange()),
-                createMetricCard("ETE", formatDuration(routePlan.estimatedTimeHours()), themePalette.successGreen()),
-                createMetricCard("Trip Fuel", formatOneDecimal(routePlan.tripFuelGallons()) + " gal", themePalette.accentGold()),
-                createMetricCard("Reserve Left", formatOneDecimal(routePlan.reserveRemainingGallons()) + " gal",
-                        routePlan.reserveSatisfied() ? themePalette.successGreen() : themePalette.warningRed())
-        );
-
-        AirportInfo departureAirport = routePlan.departureAirport();
-        AirportInfo destinationAirport = routePlan.destinationAirport();
-        AirportWeather departureWeather = latestRouteResults.stream()
-                .filter(weather -> weather.metar().airportId().equalsIgnoreCase(departureAirport.ident()))
-                .findFirst()
-                .orElse(null);
-        AirportWeather destinationWeather = latestRouteResults.stream()
-                .filter(weather -> weather.metar().airportId().equalsIgnoreCase(destinationAirport.ident()))
-                .findFirst()
-                .orElse(null);
-
-        DensityAltitudeAssessment departureDensity = departureWeather == null ? null
-                : densityAltitudeService.assess(departureAirport, departureWeather.metar(), appSettings);
-        DensityAltitudeAssessment destinationDensity = destinationWeather == null ? null
-                : densityAltitudeService.assess(destinationAirport, destinationWeather.metar(), appSettings);
-
-        Label note = routePlan.reserveSatisfied()
-                ? createMutedLabel(aircraftProfile.name() + " reserve target is satisfied for a direct route.")
-                : createMutedLabel("Reserve target is not met for " + aircraftProfile.name() + ". Consider fuel, a stop, or a different aircraft.");
-        note.setStyle("-fx-text-fill: " + (routePlan.reserveSatisfied() ? themePalette.textMuted() : themePalette.warningRed()) + "; -fx-font-size: 12px;");
-
-        LocalDateTime departureTimeUtc = getPlannedDepartureTimeUtc();
-        LocalDateTime arrivalTimeUtc = departureTimeUtc == null
-                ? null
-                : departureTimeUtc.plusMinutes((long) Math.round(routePlan.estimatedTimeHours() * 60));
-        if (departureTimeUtc != null && arrivalTimeUtc != null) {
-            metrics.getChildren().add(createMetricCard("Departure UTC", formatUtcDateTime(departureTimeUtc), themePalette.accentGold()));
-            metrics.getChildren().add(createMetricCard("Departure Local", formatLocalDateTime(departureTimeUtc), themePalette.accentBlue()));
-            metrics.getChildren().add(createMetricCard("Arrival UTC", formatUtcDateTime(arrivalTimeUtc), themePalette.accentGold()));
-            metrics.getChildren().add(createMetricCard("Arrival Local", formatLocalDateTime(arrivalTimeUtc), themePalette.accentBlue()));
-        }
-
-        VBox densityBox = new VBox(4);
-        densityBox.getChildren().add(createSubsectionTitle("Performance Snapshot"));
-        if (departureDensity != null) {
-            densityBox.getChildren().add(createMutedLabel(
-                    departureAirport.ident() + " density altitude: " + departureDensity.densityAltitudeFt() + " ft"
-            ));
-        }
-        if (destinationDensity != null) {
-            densityBox.getChildren().add(createMutedLabel(
-                    destinationAirport.ident() + " density altitude: " + destinationDensity.densityAltitudeFt() + " ft"
-            ));
-        }
-        densityBox.getChildren().add(createMutedLabel(
-                "Assumptions: taxi " + formatOneDecimal(routePlan.taxiFuelGallons()) + " gal, climb "
-                        + formatOneDecimal(routePlan.climbFuelGallons()) + " gal, airborne burn "
-                        + formatOneDecimal(routePlan.airborneFuelGallons()) + " gal."
-        ));
-        densityBox.getChildren().add(createMutedLabel(
-                "Groundspeed uses aircraft cruise " + formatSpeed(aircraftProfile.cruiseSpeedKts()) + " with "
-                        + formatSignedSpeed(appSettings.groundspeedAdjustmentKts()) + " adjustment."
-        ));
-
-        if (departureTimeUtc != null && arrivalTimeUtc != null) {
-            SolarTimes departureSolar = solarCalculatorService.calculate(departureAirport, departureTimeUtc.toLocalDate());
-            SolarTimes destinationSolar = solarCalculatorService.calculate(destinationAirport, arrivalTimeUtc.toLocalDate());
-
-            VBox solarBox = new VBox(4);
-            solarBox.getChildren().add(createSubsectionTitle("Daylight Snapshot"));
-            if (departureSolar != null) {
-                solarBox.getChildren().add(createMutedLabel(formatSolarPlanningLine(
-                        departureAirport.ident(),
-                        "Departure",
-                        departureSolar,
-                        departureTimeUtc
-                )));
-            }
-            if (destinationSolar != null) {
-                solarBox.getChildren().add(createMutedLabel(formatSolarPlanningLine(
-                        destinationAirport.ident(),
-                        "Arrival",
-                        destinationSolar,
-                        arrivalTimeUtc
-                )));
-            }
-
-            if (solarBox.getChildren().size() == 1) {
-                solarBox.getChildren().add(createMutedLabel("Sunrise and sunset data unavailable for one or more airports."));
-            }
-
-            densityBox.getChildren().add(new Separator());
-            densityBox.getChildren().add(solarBox);
-        }
-
-        return createPanel(
-                "Aircraft Planning Summary",
-                routePlan.departureAirport().ident() + " to " + routePlan.destinationAirport().ident() + " using " + aircraftProfile.name(),
-                metrics,
-                densityBox,
-                note
-        );
-    }
-
-    private void refreshRecentRoutes() {
-        recentRoutesBox.getChildren().clear();
-        List<RecentRouteEntry> recentRoutes = routeHistoryRepository.loadRecentRoutes();
-        if (recentRoutes.isEmpty()) {
-            recentRoutesBox.getChildren().add(createMutedLabel("No recent routes yet. Analyze a route to save it here."));
-            return;
-        }
-
-        for (RecentRouteEntry entry : recentRoutes) {
-            Label routeLabel = new Label(entry.departureAirport() + " -> " + entry.destinationAirport());
-            routeLabel.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 13px; -fx-font-weight: bold;");
-            routeLabel.setWrapText(true);
-            routeLabel.setMaxWidth(Double.MAX_VALUE);
-
-            String timestamp = "Saved departure " + entry.plannedDepartureUtc().format(ROUTE_TIME_FORMATTER)
-                    + " UTC  |  Local " + formatLocalDateTime(entry.plannedDepartureUtc())
-                    + "  |  Last used " + formatDateTime(entry.lastUsedUtc());
-            Label metaLabel = createMutedLabel(timestamp);
-
-            Button useButton = createSecondaryButton("Run Saved Route");
-            useButton.setOnAction(event -> {
-                populateRouteInputs(entry.departureAirport(), entry.destinationAirport(), entry.plannedDepartureUtc());
-                analyzeRoute(entry.departureAirport(), entry.destinationAirport(), entry.plannedDepartureUtc());
-            });
-
-            Button editTimeButton = createGhostButton("Edit Time");
-            editTimeButton.setOnAction(event -> {
-                populateRouteInputs(entry.departureAirport(), entry.destinationAirport(), entry.plannedDepartureUtc());
-                if (routeDepartureTimeInput != null) {
-                    routeDepartureTimeInput.requestFocus();
-                    routeDepartureTimeInput.selectAll();
-                }
-                routeStatusLabel.setText("Route loaded. Adjust the " + routeTimeModeLabel() + " departure time, then click Analyze Route.");
-            });
-
-            HBox actionRow = new HBox(10, useButton, editTimeButton);
-            actionRow.setAlignment(Pos.CENTER_LEFT);
-
-            VBox routeCard = new VBox(8, routeLabel, metaLabel, actionRow);
-            routeCard.setPadding(new Insets(12));
-            routeCard.setStyle(
-                    "-fx-background-color: " + themePalette.metricBackground() + "; -fx-border-color: " + themePalette.metricBorder() + "; " +
-                            "-fx-background-radius: 14; -fx-border-radius: 14;"
-            );
-            recentRoutesBox.getChildren().add(routeCard);
-        }
-    }
-
-    private void populateRouteInputs(String departure, String destination, LocalDateTime plannedDepartureUtc) {
-        latestRouteDeparture = departure;
-        latestRouteDestination = destination;
-        if (routeDepartureInput != null) {
-            routeDepartureInput.setText(departure);
-        }
-        if (routeDestinationInput != null) {
-            routeDestinationInput.setText(destination);
-        }
-        if (routeDepartureTimeInput != null && plannedDepartureUtc != null) {
-            routeDepartureTimeInput.setText(formatRouteInputValue(plannedDepartureUtc, currentRouteTimeMode()));
-        }
-        updateRouteTimeHelper();
-    }
-
-    private VBox buildRoutePlannerControls(Button planButton, Button exportButton) {
-        VBox fields = new VBox(12);
-
-        VBox departureBox = new VBox(6, formLabel("Departure"), routeDepartureInput);
-        VBox destinationBox = new VBox(6, formLabel("Destination"), routeDestinationInput);
-        VBox timeBox = new VBox(6, formLabel("Departure Time"), routeDepartureTimeInput, routeTimeHelperLabel);
-        VBox timeModeBox = new VBox(6, formLabel("Time Input"), routeTimeModeBox);
-
-        HBox firstRow = new HBox(12, departureBox, destinationBox, timeBox, timeModeBox);
-        HBox.setHgrow(departureBox, Priority.ALWAYS);
-        HBox.setHgrow(destinationBox, Priority.ALWAYS);
-        HBox.setHgrow(timeBox, Priority.ALWAYS);
-        HBox.setHgrow(timeModeBox, Priority.NEVER);
-
-        Label plannerHint = createMutedLabel(
-                "Uses the selected aircraft profile plus route assumptions from Settings. Enter UTC or local time, then CloudDeck converts it internally to UTC."
-        );
-        HBox actionRow = new HBox(10, planButton, exportButton);
-        actionRow.setAlignment(Pos.CENTER_LEFT);
-
-        fields.getChildren().addAll(firstRow, plannerHint, actionRow);
-        return fields;
-    }
-
-    private void analyzeRouteFromInputs() {
-        String departure = routeDepartureInput.getText().trim().toUpperCase();
-        String destination = routeDestinationInput.getText().trim().toUpperCase();
-
-        if (departure.isEmpty() || destination.isEmpty()) {
-            routeStatusLabel.setText("Please enter both a departure and destination.");
-            return;
-        }
-
-        LocalDateTime plannedDepartureUtc;
-        plannedDepartureUtc = getPlannedDepartureTimeUtc();
-        if (plannedDepartureUtc == null) {
-            routeStatusLabel.setText("Use " + routeTimeModeLabel() + " departure time format yyyy-MM-dd HH:mm.");
-            return;
-        }
-
-        analyzeRoute(departure, destination, plannedDepartureUtc);
-    }
-
-    private void analyzeRoute(String departure, String destination, LocalDateTime plannedDepartureUtc) {
-        if (plannedDepartureUtc == null) {
-            routeStatusLabel.setText("Use " + routeTimeModeLabel() + " departure time format yyyy-MM-dd HH:mm.");
-            return;
-        }
-
-        populateRouteInputs(departure, destination, plannedDepartureUtc);
-
-        routeResultsBox.getChildren().setAll(routeStatusLabel);
-        routeStatusLabel.setText("Fetching route weather and forecast data...");
-
-        runAsync(
-                () -> weatherService.fetchAirportWeather(departure + "," + destination),
-                weather -> {
-                    latestRouteResults = weather;
-                    resetLazyHistoryStatuses(weather);
-                    routeHistoryRepository.saveRecentRoute(departure, destination, plannedDepartureUtc);
-                    invalidateAlternateSuggestions();
-                    refreshRecentRoutes();
-                    routeStatusLabel.setText("");
-                    rerenderRouteResults();
-                },
-                throwable -> routeStatusLabel.setText("Error: " + throwable.getMessage())
-        );
-    }
-
-    private void refreshFavoritesBar(TextField airportInput) {
-        favoritesBar.getChildren().clear();
-        List<String> favorites = favoritesRepository.loadFavorites().stream()
-                .filter(favorite -> !favorite.contains("->") && !favorite.contains("→"))
-                .toList();
-
-        if (favorites.isEmpty()) {
-            favoritesBar.getChildren().add(createMutedLabel("No saved airports yet. Save one from an airport card."));
-            return;
-        }
-
-        FlowPane chips = new FlowPane();
-        chips.setHgap(8);
-        chips.setVgap(8);
-
-        for (String icao : favorites) {
-            HBox chip = new HBox(4);
-            chip.setAlignment(Pos.CENTER_LEFT);
-            chip.setStyle(
-                    "-fx-background-color: " + themePalette.metricBackground() + "; -fx-border-color: " + themePalette.borderColor() + "; " +
-                            "-fx-background-radius: 16; -fx-border-radius: 16; -fx-padding: 4px 6px 4px 10px;"
-            );
-
-            Button selectButton = new Button(icao);
-            selectButton.setStyle("-fx-background-color: transparent; -fx-text-fill: " + themePalette.accentBlue() + "; -fx-font-size: 12px;");
-            selectButton.setOnAction(event -> airportInput.setText(icao));
-
-            Button removeButton = new Button("x");
-            removeButton.setStyle("-fx-background-color: transparent; -fx-text-fill: " + themePalette.favoriteRemoveColor() + "; -fx-font-size: 11px;");
-            removeButton.setOnAction(event -> {
-                favoritesRepository.removeFavorite(icao);
-                refreshFavoritesBar(airportInput);
-            });
-
-            chip.getChildren().addAll(selectButton, removeButton);
-            chips.getChildren().add(chip);
-        }
-
-        favoritesBar.getChildren().add(chips);
-    }
-    private void attachAutocomplete(TextField input, Stage stage) {
-        ListView<String> suggestionList = new ListView<>();
-        suggestionList.setStyle(
-                "-fx-background-color: " + themePalette.listBackground() + "; -fx-border-color: " + themePalette.borderColor() + "; -fx-border-width: 1px;"
-        );
-        suggestionList.setPrefHeight(140);
-        suggestionList.setMaxWidth(420);
-
-        Popup popup = new Popup();
-        popup.getContent().add(suggestionList);
-        popup.setAutoHide(true);
-
-        input.textProperty().addListener((observable, oldValue, newValue) -> {
-            String[] parts = newValue.split(",");
-            String currentQuery = parts[parts.length - 1].trim();
-
-            if (currentQuery.length() < 2) {
-                popup.hide();
-                return;
-            }
-
-            runAsync(
-                    () -> airportsRepository.suggestAirports(currentQuery, 6),
-                    suggestions -> showSuggestions(input, stage, popup, suggestionList, suggestions),
-                    throwable -> popup.hide()
-            );
-        });
-
-        suggestionList.setOnMouseClicked(event -> {
-            String selected = suggestionList.getSelectionModel().getSelectedItem();
-            if (selected == null) {
-                return;
-            }
-
-            String icao = selected.split("  -  ")[0].trim();
-            String[] parts = input.getText().split(",");
-            parts[parts.length - 1] = " " + icao;
-            input.setText(String.join(",", parts).trim());
-            input.positionCaret(input.getText().length());
-            popup.hide();
-        });
-    }
-
-    private void showSuggestions(TextField input, Stage stage, Popup popup, ListView<String> suggestionList, List<AirportSuggestion> suggestions) {
-        if (suggestions.isEmpty()) {
-            popup.hide();
-            return;
-        }
-
-        suggestionList.getItems().setAll(suggestions.stream().map(AirportSuggestion::displayLabel).toList());
-        Bounds bounds = input.localToScreen(input.getBoundsInLocal());
-        if (bounds != null) {
-            popup.show(stage, bounds.getMinX(), bounds.getMaxY() + 4);
-        }
-    }
-    private void toggleFavorite(String airportId, Button favoriteButton) {
-        if (favoritesRepository.isFavorite(airportId)) {
-            favoritesRepository.removeFavorite(airportId);
-            favoriteButton.setText("Save");
-        } else {
-            favoritesRepository.addFavorite(airportId);
-            favoriteButton.setText("Saved");
-        }
-
-        if (weatherAirportInput != null) {
-            refreshFavoritesBar(weatherAirportInput);
-        }
-    }
-
-    private void openExternalUrl(String url) {
-        try {
-            getHostServices().showDocument(url);
-        } catch (Exception exception) {
-            if (routeStatusLabel != null) {
-                routeStatusLabel.setText("Could not open browser: " + exception.getMessage());
-            }
-        }
-    }
-
-    private void openAirportDiagramPdf(String airportId) {
-        runAsync(
-                () -> airportDiagramService.loadPreview(airportId),
-                preview -> {
-                    if (preview != null) {
-                        openExternalUrl(preview.pdfUrl());
-                    }
-                },
-                throwable -> {
-                    if (routeStatusLabel != null) {
-                        routeStatusLabel.setText("Could not open airport diagram PDF: " + throwable.getMessage());
-                    }
-                }
-        );
-    }
-
-    private void updateAircraftDisplays() {
-        AircraftProfile selectedProfile = aircraftSelector.getValue();
+    void updateAircraftDisplays() {
+        AircraftProfile selectedProfile = ctx.aircraftSelector.getValue();
         if (selectedProfile == null) {
-            aircraftHeroSummary.setText("No aircraft selected");
-            aircraftHeroNote.setText("Runway cards will still load, but fuel planning and personal crosswind alerts stay disabled.");
-            aircraftSummaryBox.getChildren().setAll(createMutedLabel("Create or select an aircraft profile to personalize planning."));
+            ctx.aircraftHeroSummary.setText("No aircraft selected");
+            ctx.aircraftHeroNote.setText("Runway cards will still load, but fuel planning and personal crosswind alerts stay disabled.");
+            ctx.aircraftSummaryBox.getChildren().setAll(ui.createMutedLabel("Create or select an aircraft profile to personalize planning."));
             return;
         }
 
-        aircraftHeroSummary.setText(selectedProfile.name() + "  |  Cruise " + formatSpeed(selectedProfile.cruiseSpeedKts()));
-        aircraftHeroNote.setText(
-                "Fuel burn " + formatOneDecimal(selectedProfile.fuelBurnGph()) + " gph, usable fuel "
-                        + formatOneDecimal(selectedProfile.usableFuelGallons()) + " gal, max crosswind "
-                        + formatSpeed(selectedProfile.maxCrosswindKts()) + "."
+        ctx.aircraftHeroSummary.setText(selectedProfile.name() + "  |  Cruise " + ui.formatSpeed(selectedProfile.cruiseSpeedKts()));
+        ctx.aircraftHeroNote.setText(
+                "Fuel burn " + ui.formatOneDecimal(selectedProfile.fuelBurnGph()) + " gph, usable fuel "
+                        + ui.formatOneDecimal(selectedProfile.usableFuelGallons()) + " gal, max crosswind "
+                        + ui.formatSpeed(selectedProfile.maxCrosswindKts()) + "."
         );
 
-        FlowPane metrics = new FlowPane();
+        javafx.scene.layout.FlowPane metrics = new javafx.scene.layout.FlowPane();
         metrics.setHgap(10);
         metrics.setVgap(10);
         metrics.getChildren().addAll(
-                createMetricCard("Cruise", formatSpeed(selectedProfile.cruiseSpeedKts()), themePalette.accentBlue()),
-                createMetricCard("Burn", formatOneDecimal(selectedProfile.fuelBurnGph()) + " gph", themePalette.accentGold()),
-                createMetricCard("Usable Fuel", formatOneDecimal(selectedProfile.usableFuelGallons()) + " gal", themePalette.successGreen()),
-                createMetricCard("Crosswind", formatSpeed(selectedProfile.maxCrosswindKts()), themePalette.cautionOrange())
+                ui.createMetricCard("Cruise", ui.formatSpeed(selectedProfile.cruiseSpeedKts()), ctx.themePalette.accentBlue()),
+                ui.createMetricCard("Burn", ui.formatOneDecimal(selectedProfile.fuelBurnGph()) + " gph", ctx.themePalette.accentGold()),
+                ui.createMetricCard("Usable Fuel", ui.formatOneDecimal(selectedProfile.usableFuelGallons()) + " gal", ctx.themePalette.successGreen()),
+                ui.createMetricCard("Crosswind", ui.formatSpeed(selectedProfile.maxCrosswindKts()), ctx.themePalette.cautionOrange())
         );
 
-        Label notesLabel = createMutedLabel(selectedProfile.notes().isBlank()
+        Label notesLabel = ui.createMutedLabel(selectedProfile.notes().isBlank()
                 ? "No additional notes saved for this profile."
                 : selectedProfile.notes());
         notesLabel.setWrapText(true);
 
-        aircraftSummaryBox.getChildren().setAll(metrics, notesLabel);
+        ctx.aircraftSummaryBox.getChildren().setAll(metrics, notesLabel);
     }
 
-    private void reloadAircraftProfiles(String selectedName) {
-        List<AircraftProfile> profiles = aircraftProfileRepository.loadProfiles();
-        aircraftSelector.getItems().setAll(profiles);
+    void reloadAircraftProfiles(String selectedName) {
+        List<AircraftProfile> profiles = ctx.aircraftProfileRepository.loadProfiles();
+        ctx.aircraftSelector.getItems().setAll(profiles);
         if (profiles.isEmpty()) {
-            aircraftSelector.setValue(null);
+            ctx.aircraftSelector.setValue(null);
             return;
         }
 
@@ -2201,654 +381,43 @@ public class MainApp extends Application {
                     break;
                 }
             }
-        } else if (aircraftSelector.getValue() != null) {
+        } else if (ctx.aircraftSelector.getValue() != null) {
             for (AircraftProfile profile : profiles) {
-                if (profile.name().equalsIgnoreCase(aircraftSelector.getValue().name())) {
+                if (profile.name().equalsIgnoreCase(ctx.aircraftSelector.getValue().name())) {
                     selectedProfile = profile;
                     break;
                 }
             }
         }
 
-        aircraftSelector.setValue(selectedProfile);
-    }
-    private Label createSectionTitle(String text) {
-        Label label = new Label(text);
-        label.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 28px; -fx-font-weight: bold; -fx-letter-spacing: 0.5px;");
-        return label;
+        ctx.aircraftSelector.setValue(selectedProfile);
     }
 
-    private Label createSectionSubtitle(String text) {
-        Label label = new Label(text);
-        label.setStyle("-fx-text-fill: " + themePalette.textMuted() + "; -fx-font-size: 13px; -fx-line-spacing: 1.5px;");
-        label.setWrapText(true);
-        return label;
-    }
-
-    private Label createSubsectionTitle(String text) {
-        Label label = new Label(text);
-        label.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 14px; -fx-font-weight: bold;");
-        return label;
-    }
-
-    private VBox createPanel(String title, String subtitle, javafx.scene.Node... content) {
-        Label titleLabel = new Label(title);
-        titleLabel.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 16px; -fx-font-weight: bold; -fx-letter-spacing: 0.4px;");
-
-        Label subtitleLabel = new Label(subtitle);
-        subtitleLabel.setStyle("-fx-text-fill: " + themePalette.textMuted() + "; -fx-font-size: 12px;");
-        subtitleLabel.setWrapText(true);
-
-        VBox panelHeader = new VBox(4, titleLabel, subtitleLabel);
-        panelHeader.setPadding(new Insets(0, 0, 10, 0));
-        panelHeader.setStyle("-fx-border-color: transparent transparent " + themePalette.metricBorder() + " transparent; -fx-border-width: 0 0 1 0;");
-
-        VBox panel = new VBox(14);
-        panel.setPadding(new Insets(18));
-        panel.setStyle(panelStyle(themePalette.surfaceBackgroundAlt(), true));
-        panel.getChildren().add(panelHeader);
-        panel.getChildren().addAll(content);
-        return panel;
-    }
-
-    private String panelStyle(String background, boolean elevated) {
-        return "-fx-background-color: " + background + ";"
-                + "-fx-background-radius: 18;"
-                + "-fx-border-color: " + themePalette.borderColor() + ";"
-                + "-fx-border-radius: 18;"
-                + "-fx-border-width: 1;"
-                + (elevated ? "-fx-effect: " + CARD_SHADOW + ";" : "")
-                + "-fx-background-insets: 0;";
-    }
-
-    private VBox createMetricCard(String title, String value, String accentColor) {
-        Label titleLabel = new Label(title);
-        titleLabel.setStyle("-fx-text-fill: " + themePalette.unknownGray() + "; -fx-font-size: 10px; -fx-font-weight: bold; -fx-letter-spacing: 0.8px;");
-
-        Label valueLabel = new Label(value);
-        valueLabel.setStyle("-fx-text-fill: " + accentColor + "; -fx-font-size: 16px; -fx-font-weight: bold;");
-
-        VBox card = new VBox(4, titleLabel, valueLabel);
-        card.setPadding(new Insets(12));
-        card.setMinWidth(130);
-        card.setStyle(
-                "-fx-background-color: " + themePalette.metricBackground() + "; -fx-border-color: " + themePalette.metricBorder() + "; " +
-                        "-fx-background-radius: 14; -fx-border-radius: 14; -fx-border-width: 1 1 1 4;"
-        );
-        return card;
-    }
-
-    private Label createStatusLine(String text, VfrStatusLevel level) {
-        Label label = new Label(text);
-        label.setWrapText(true);
-        label.setStyle(switch (level) {
-            case WARNING -> "-fx-text-fill: " + themePalette.warningRed() + "; -fx-font-size: 13px; -fx-font-weight: bold;";
-            case CAUTION -> "-fx-text-fill: " + themePalette.cautionOrange() + "; -fx-font-size: 13px; -fx-font-weight: bold;";
-            case VFR -> "-fx-text-fill: " + themePalette.successGreen() + "; -fx-font-size: 13px; -fx-font-weight: bold;";
-        });
-        return label;
-    }
-
-    private VBox createBanner(String text, RouteDecisionLevel level) {
-        Label label = new Label(text);
-        label.setWrapText(true);
-        label.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 16px; -fx-font-weight: bold;");
-
-        String background = switch (level) {
-            case GO -> themePalette.bannerGo();
-            case CAUTION -> themePalette.bannerCaution();
-            case NO_GO -> themePalette.bannerNoGo();
-        };
-
-        VBox banner = new VBox(label);
-        banner.setPadding(new Insets(14));
-        banner.setStyle(
-                "-fx-background-color: " + background + "; -fx-border-color: " + themePalette.borderColor() + "; " +
-                        "-fx-background-radius: 16; -fx-border-radius: 16;"
-        );
-        return banner;
-    }
-
-    private Label createBadge(String text, String color) {
-        Label badge = new Label(text);
-        badge.setStyle(
-                "-fx-background-color: " + themePalette.badgeBackground() + "; -fx-text-fill: " + color + "; -fx-font-size: 11px; " +
-                        "-fx-font-weight: bold; -fx-background-radius: 12; -fx-padding: 4px 10px;"
-        );
-        return badge;
-    }
-
-    private String monospaceMutedStyle() {
-        return "-fx-text-fill: " + themePalette.codeText() + "; -fx-font-family: 'Courier New'; -fx-font-size: 11px;";
-    }
-
-    private Button createPrimaryButton(String text) {
-        Button button = new Button(text);
-        button.setStyle(
-                "-fx-background-color: linear-gradient(to right, " + themePalette.primaryGradientStart() + ", " + themePalette.primaryGradientEnd() + "); -fx-text-fill: white; " +
-                        "-fx-font-size: 12px; -fx-font-weight: bold; -fx-padding: 10px 18px; -fx-background-radius: 14; -fx-cursor: hand; -fx-letter-spacing: 0.8px;"
-        );
-        return button;
-    }
-
-    private Button createSecondaryButton(String text) {
-        Button button = new Button(text);
-        button.setStyle(
-                "-fx-background-color: " + themePalette.controlBackground() + "; -fx-border-color: " + themePalette.borderColor() + "; -fx-text-fill: " + themePalette.textPrimary() + "; " +
-                        "-fx-font-size: 12px; -fx-padding: 9px 16px; -fx-background-radius: 14; -fx-border-radius: 14; -fx-cursor: hand; -fx-letter-spacing: 0.5px;"
-        );
-        return button;
-    }
-
-    private Button createGhostButton(String text) {
-        Button button = new Button(text);
-        button.setStyle(
-                "-fx-background-color: transparent; -fx-border-color: " + themePalette.borderColor() + "; -fx-text-fill: " + themePalette.accentGold() + "; " +
-                        "-fx-font-size: 12px; -fx-padding: 6px 12px; -fx-background-radius: 14; -fx-border-radius: 14; -fx-cursor: hand; -fx-letter-spacing: 0.5px;"
-        );
-        return button;
-    }
-
-    private TextField createInputField(String prompt, double maxWidth) {
-        TextField field = new TextField();
-        field.setPromptText(prompt);
-        field.setMaxWidth(maxWidth);
-        field.setStyle(
-                "-fx-background-color: " + themePalette.controlBackground() + "; -fx-border-color: " + themePalette.borderColor() + "; -fx-text-fill: " + themePalette.textPrimary() + "; " +
-                        "-fx-prompt-text-fill: " + themePalette.unknownGray() + "; -fx-font-size: 13px; -fx-padding: 10px 12px; -fx-background-radius: 14; -fx-border-radius: 14;"
-        );
-        return field;
-    }
-
-    private Label createMutedLabel(String text) {
-        Label label = new Label(text);
-        label.setStyle("-fx-text-fill: " + themePalette.unknownGray() + "; -fx-font-size: 12px;");
-        label.setWrapText(true);
-        return label;
-    }
-
-    private Label makeInfoLabel(String text) {
-        Label label = new Label(text);
-        label.setTextFill(Color.web(themePalette.textPrimary()));
-        label.setFont(Font.font("Bahnschrift SemiCondensed", 13));
-        label.setWrapText(true);
-        return label;
-    }
-
-    private Label formLabel(String text) {
-        Label label = new Label(text);
-        label.setStyle("-fx-text-fill: " + themePalette.textMuted() + "; -fx-font-size: 11px; -fx-font-weight: bold; -fx-letter-spacing: 0.7px;");
-        return label;
-    }
-
-    private HBox buildSectionFlightStrip(VBox... cards) {
-        HBox strip = new HBox(12, cards);
-        strip.setPadding(new Insets(2, 0, 4, 0));
-        return strip;
-    }
-
-    private VBox createSectionStripCard(String label, String value) {
-        Label labelNode = new Label(label.toUpperCase());
-        labelNode.setStyle("-fx-text-fill: " + themePalette.unknownGray() + "; -fx-font-size: 10px; -fx-font-weight: bold; -fx-letter-spacing: 1.1px;");
-
-        Label valueNode = new Label(value);
-        valueNode.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 13px; -fx-font-weight: bold;");
-        valueNode.setWrapText(true);
-
-        VBox card = new VBox(4, labelNode, valueNode);
-        card.setPadding(new Insets(12, 14, 12, 14));
-        card.setPrefWidth(220);
-        card.setStyle(
-                "-fx-background-color: " + themePalette.metricBackground() + "; -fx-border-color: " + themePalette.metricBorder() + "; " +
-                        "-fx-background-radius: 14; -fx-border-radius: 14; -fx-border-width: 1 1 1 4;"
-        );
-        return card;
-    }
-
-    private VBox createInsetBanner(String label, String value, String accentColor) {
-        Label labelNode = new Label(label.toUpperCase());
-        labelNode.setStyle("-fx-text-fill: " + accentColor + "; -fx-font-size: 10px; -fx-font-weight: bold; -fx-letter-spacing: 1.2px;");
-
-        Label valueNode = new Label(value);
-        valueNode.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 14px; -fx-font-weight: bold;");
-        valueNode.setWrapText(true);
-
-        VBox banner = new VBox(5, labelNode, valueNode);
-        banner.setPadding(new Insets(12, 14, 12, 14));
-        banner.setStyle(
-                "-fx-background-color: " + themePalette.insetBackground() + "; -fx-border-color: " + accentColor + "; " +
-                        "-fx-background-radius: 14; -fx-border-radius: 14; -fx-border-width: 1 1 1 5;"
-        );
-        return banner;
-    }
-
-    private VBox createHeaderChip(String label, String value) {
-        Label labelNode = new Label(label.toUpperCase());
-        labelNode.setStyle("-fx-text-fill: " + themePalette.accentGold() + "; -fx-font-size: 10px; -fx-font-weight: bold; -fx-letter-spacing: 1.0px;");
-
-        Label valueNode = new Label(value);
-        valueNode.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 12px; -fx-font-weight: bold;");
-
-        VBox chip = new VBox(2, labelNode, valueNode);
-        chip.setPadding(new Insets(10, 14, 10, 14));
-        chip.setStyle(
-                "-fx-background-color: " + themePalette.metricBackground() + "; -fx-border-color: " + themePalette.metricBorder() + "; " +
-                        "-fx-background-radius: 14; -fx-border-radius: 14;"
-        );
-        return chip;
-    }
-
-    private HBox aircraftSelectorPlaceholder() {
-        Label activeLabel = new Label("Active profile is selected in the header");
-        activeLabel.setStyle("-fx-text-fill: " + themePalette.textMuted() + "; -fx-font-size: 12px;");
-        HBox box = new HBox(activeLabel);
-        box.setAlignment(Pos.CENTER_LEFT);
-        return box;
-    }
-
-    private Label createRailEyebrow(String text) {
-        Label label = new Label(text.toUpperCase());
-        label.setStyle("-fx-text-fill: " + themePalette.accentGold() + "; -fx-font-size: 10px; -fx-font-weight: bold; -fx-letter-spacing: 1.2px;");
-        return label;
-    }
-
-    private Label createRailValue(String text) {
-        Label label = new Label(text);
-        label.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 14px; -fx-font-weight: bold;");
-        label.setWrapText(true);
-        return label;
-    }
-
-    private String vfrStatusText(VfrStatusLevel level) {
-        return switch (level) {
-            case VFR -> "clear for scan";
-            case CAUTION -> "watch item";
-            case WARNING -> "attention required";
-        };
-    }
-
-    private String categoryColor(String category) {
-        return switch (category) {
-            case "VFR" -> themePalette.successGreen();
-            case "MVFR" -> themePalette.accentBlue();
-            case "IFR" -> themePalette.warningRed();
-            case "LIFR" -> "#d789ff";
-            default -> themePalette.unknownGray();
-        };
-    }
-
-    private String statusAccentColor(VfrStatusLevel level) {
-        return switch (level) {
-            case WARNING -> themePalette.warningRed();
-            case CAUTION -> themePalette.cautionOrange();
-            case VFR -> themePalette.successGreen();
-        };
-    }
-
-    private String decisionAccentColor(RouteDecisionLevel level) {
-        return switch (level) {
-            case GO -> themePalette.successGreen();
-            case CAUTION -> themePalette.cautionOrange();
-            case NO_GO -> themePalette.warningRed();
-        };
-    }
-
-    private VfrAssessment assessTafPeriod(TafPeriod period) {
-        TafData syntheticTaf = new TafData("TEMP", "", null, "", period.startTimeUtc(), period.endTimeUtc(), "", List.of(period));
-        return flightConditionEvaluator.assessTaf(syntheticTaf, appSettings);
-    }
-
-    private String formatTafPeriod(TafPeriod period, VfrAssessment assessment) {
-        StringBuilder builder = new StringBuilder();
-        builder.append(period.label()).append(": ").append(assessment == null ? "Forecast available" : assessment.level());
-
-        if (period.visibilitySm() != null) {
-            builder.append(" | Vis ").append(formatVisibility(period.visibilitySm()));
-        }
-        if (!period.cloudLayers().isEmpty()) {
-            builder.append(" | ").append(period.cloudLayersSummary());
-        }
-        if (!period.weatherTokens().isEmpty()) {
-            builder.append(" | Wx ").append(String.join(" ", period.weatherTokens()));
+    void toggleFavorite(String airportId, Button favoriteButton) {
+        if (ctx.favoritesRepository.isFavorite(airportId)) {
+            ctx.favoritesRepository.removeFavorite(airportId);
+            favoriteButton.setText("Save");
+        } else {
+            ctx.favoritesRepository.addFavorite(airportId);
+            favoriteButton.setText("Saved");
         }
 
-        return builder.toString();
-    }
-
-    private AirportWeather findRouteWeather(String airportId) {
-        return latestRouteResults.stream()
-                .filter(weather -> weather.metar().airportId().equalsIgnoreCase(airportId))
-                .findFirst()
-                .orElse(null);
-    }
-
-    private String formatDuration(double hours) {
-        int wholeHours = (int) hours;
-        int minutes = (int) Math.round((hours - wholeHours) * 60);
-        if (minutes == 60) {
-            wholeHours += 1;
-            minutes = 0;
+        if (weatherView != null) {
+            weatherView.refreshFavoritesBar(weatherView.getAirportInput());
         }
-        return wholeHours + "h " + minutes + "m";
     }
 
-    private String formatOneDecimal(double value) {
-        return String.format("%.1f", value);
-    }
-
-    private LocalDateTime getPlannedDepartureTimeUtc() {
-        if (routeDepartureTimeInput == null || routeDepartureTimeInput.getText().isBlank()) {
-            return null;
-        }
-        return parseRouteTimeInput(routeDepartureTimeInput.getText(), currentRouteTimeMode());
-    }
-
-    private LocalDateTime parseRouteTimeInput(String rawValue, TimeDisplayMode inputMode) {
-        if (rawValue == null || rawValue.isBlank() || inputMode == null) {
-            return null;
-        }
-
+    void openExternalUrl(String url) {
         try {
-            LocalDateTime parsedTime = LocalDateTime.parse(rawValue.trim(), ROUTE_TIME_FORMATTER);
-            if (inputMode == TimeDisplayMode.UTC) {
-                return parsedTime;
-            }
-            return parsedTime.atZone(ZoneId.systemDefault())
-                    .withZoneSameInstant(ZoneOffset.UTC)
-                    .toLocalDateTime();
-        } catch (DateTimeParseException exception) {
-            return null;
-        }
-    }
-
-    private String formatRouteInputValue(LocalDateTime timeUtc, TimeDisplayMode inputMode) {
-        if (timeUtc == null) {
-            return "";
-        }
-        if (inputMode == TimeDisplayMode.LOCAL) {
-            return timeUtc.atOffset(ZoneOffset.UTC)
-                    .atZoneSameInstant(ZoneId.systemDefault())
-                    .format(ROUTE_TIME_FORMATTER);
-        }
-        return timeUtc.format(ROUTE_TIME_FORMATTER);
-    }
-
-    private void updateRouteTimeHelper() {
-        if (routeTimeHelperLabel == null) {
-            return;
-        }
-
-        LocalDateTime departureTimeUtc = getPlannedDepartureTimeUtc();
-        if (departureTimeUtc == null) {
-            routeTimeHelperLabel.setText("Enter time as yyyy-MM-dd HH:mm in " + routeTimeModeLabel() + ".");
-            return;
-        }
-
-        routeTimeHelperLabel.setText(
-                "UTC: " + formatUtcDateTime(departureTimeUtc) + "  |  Local: " + formatLocalDateTime(departureTimeUtc)
-        );
-    }
-
-    private TimeDisplayMode currentRouteTimeMode() {
-        return routeTimeModeBox == null || routeTimeModeBox.getValue() == null
-                ? TimeDisplayMode.UTC
-                : routeTimeModeBox.getValue();
-    }
-
-    private String routeTimeModeLabel() {
-        return currentRouteTimeMode() == TimeDisplayMode.LOCAL ? "Local" : "UTC";
-    }
-
-    private String formatTemperature(float tempC) {
-        if (appSettings.temperatureUnit() == TemperatureUnit.CELSIUS) {
-            return formatOneDecimal(tempC) + " C";
-        }
-        return formatOneDecimal((tempC * 9 / 5) + 32) + " F";
-    }
-
-    private String formatVisibility(float visibilitySm) {
-        return formatOneDecimal(visibilitySm) + " SM";
-    }
-
-    private String formatDistance(double distanceNm) {
-        if (appSettings.distanceUnit() == DistanceUnit.STATUTE_MILES) {
-            return formatOneDecimal(distanceNm * 1.15078) + " mi";
-        }
-        return formatOneDecimal(distanceNm) + " nm";
-    }
-
-    private String formatSpeed(double speedKts) {
-        return formatSpeedValue(speedKts) + " " + speedUnitShortLabel();
-    }
-
-    private String formatSignedSpeed(double speedKts) {
-        return (speedKts >= 0 ? "+" : "-") + formatSpeed(Math.abs(speedKts));
-    }
-
-    private String formatSpeedValue(double speedKts) {
-        double convertedSpeed = switch (appSettings.windUnit()) {
-            case KNOTS -> speedKts;
-            case MILES_PER_HOUR -> speedKts * 1.15078;
-            case KILOMETERS_PER_HOUR -> speedKts * 1.852;
-        };
-        return formatOneDecimal(convertedSpeed);
-    }
-
-    private String speedUnitShortLabel() {
-        return switch (appSettings.windUnit()) {
-            case KNOTS -> "kt";
-            case MILES_PER_HOUR -> "mph";
-            case KILOMETERS_PER_HOUR -> "km/h";
-        };
-    }
-
-    private String formatWind(int direction, int speedKts, int gustKts) {
-        return gustKts > 0
-                ? String.format("%03d deg @ %sG%s %s", direction, formatSpeedValue(speedKts), formatSpeedValue(gustKts), speedUnitShortLabel())
-                : String.format("%03d deg @ %s %s", direction, formatSpeedValue(speedKts), speedUnitShortLabel());
-    }
-
-    private String formatCompactWind(int direction, int speedKts, int gustKts) {
-        return gustKts > 0
-                ? String.format("%03d/%sG%s %s", direction, formatSpeedValue(speedKts), formatSpeedValue(gustKts), speedUnitShortLabel())
-                : String.format("%03d/%s %s", direction, formatSpeedValue(speedKts), speedUnitShortLabel());
-    }
-
-    private String formatAltimeter(float altimeterInHg) {
-        if (appSettings.altimeterUnit() == AltimeterUnit.HPA) {
-            return Math.round(altimeterInHg * 33.8639f) + " hPa";
-        }
-        return String.format("%.2f inHg", altimeterInHg);
-    }
-
-    private String formatDateTime(LocalDateTime timeUtc) {
-        if (timeUtc == null) {
-            return "";
-        }
-        if (appSettings.timeDisplayMode() == TimeDisplayMode.UTC) {
-            return timeUtc.format(ROUTE_TIME_FORMATTER) + " UTC";
-        }
-        return formatLocalDateTime(timeUtc);
-    }
-
-    private String formatClockTime(LocalDateTime timeUtc) {
-        if (timeUtc == null) {
-            return "";
-        }
-        if (appSettings.timeDisplayMode() == TimeDisplayMode.UTC) {
-            return timeUtc.toLocalTime().format(CLOCK_FORMATTER) + " UTC";
-        }
-        ZonedDateTime localTime = toLocalZonedDateTime(timeUtc);
-        return localTime.format(DateTimeFormatter.ofPattern("HH:mm z"));
-    }
-
-    private String formatUtcDateTime(LocalDateTime timeUtc) {
-        return timeUtc == null ? "" : timeUtc.format(ROUTE_TIME_FORMATTER) + " UTC";
-    }
-
-    private String formatLocalDateTime(LocalDateTime timeUtc) {
-        if (timeUtc == null) {
-            return "";
-        }
-        return toLocalZonedDateTime(timeUtc).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm z"));
-    }
-
-    private ZonedDateTime toLocalZonedDateTime(LocalDateTime timeUtc) {
-        return timeUtc.atOffset(ZoneOffset.UTC).atZoneSameInstant(ZoneId.systemDefault());
-    }
-
-    private String formatObservationTime(String observationTime) {
-        LocalDateTime observationTimeUtc = extractUtcDateTime(observationTime);
-        if (observationTimeUtc == null) {
-            return observationTime == null ? "" : observationTime.replace("T", " ").replace(".000Z", "Z");
-        }
-        return formatDateTime(observationTimeUtc);
-    }
-
-    private String timeDisplayShortLabel() {
-        return appSettings.timeDisplayMode() == TimeDisplayMode.UTC ? "UTC" : "Local";
-    }
-
-    private String formatSolarSummary(SolarTimes solarTimes) {
-        if (solarTimes.allDaylight()) {
-            return "Sun above horizon all day on " + solarTimes.dateUtc() + " " + timeDisplayShortLabel();
-        }
-        if (solarTimes.allNight()) {
-            return "Sun below horizon all day on " + solarTimes.dateUtc() + " " + timeDisplayShortLabel();
-        }
-        return "Sunrise " + formatClockTime(solarTimes.sunriseUtc())
-                + "  |  Sunset " + formatClockTime(solarTimes.sunsetUtc());
-    }
-
-    private String formatSolarPlanningLine(String airportId, String phase, SolarTimes solarTimes, LocalDateTime timeUtc) {
-        String condition = solarCalculatorService.isDaylight(solarTimes, timeUtc) ? "daylight" : "night";
-        return airportId + " " + phase + " at " + formatClockTime(timeUtc)
-                + " is in " + condition + "  |  " + formatSolarSummary(solarTimes);
-    }
-
-    private LocalDateTime extractUtcDateTime(String observationTime) {
-        if (observationTime == null || observationTime.isBlank()) {
-            return null;
-        }
-        try {
-            return Instant.parse(observationTime).atOffset(ZoneOffset.UTC).toLocalDateTime();
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private LocalDate extractUtcDate(String observationTime) {
-        LocalDateTime observationTimeUtc = extractUtcDateTime(observationTime);
-        if (observationTimeUtc != null) {
-            return observationTimeUtc.toLocalDate();
-        }
-        return LocalDate.now(ZoneOffset.UTC);
-    }
-
-    private void maybeLoadAlternateSuggestions() {
-        if (alternateSuggestionsLoading || !latestAlternateOptions.isEmpty() || !alternateSuggestionsStatus.isBlank()) {
-            return;
-        }
-
-        AircraftProfile selectedAircraft = aircraftSelector.getValue();
-        alternateSuggestionsLoading = true;
-        alternateSuggestionsStatus = "";
-
-        runAsync(
-                () -> alternateAirportService.suggestAlternates(
-                        latestRouteDeparture,
-                        latestRouteDestination,
-                        selectedAircraft,
-                        appSettings,
-                        4
-                ),
-                alternates -> {
-                    latestAlternateOptions = alternates;
-                    alternateSuggestionsLoading = false;
-                    alternateSuggestionsStatus = alternates.isEmpty()
-                            ? "No suitable nearby alternates were found within the search radius."
-                            : "";
-                    rerenderRouteResults();
-                },
-                throwable -> {
-                    latestAlternateOptions = List.of();
-                    alternateSuggestionsLoading = false;
-                    alternateSuggestionsStatus = "Could not load alternate airports: " + throwable.getMessage();
-                    rerenderRouteResults();
-                }
-        );
-    }
-
-    private void invalidateAlternateSuggestions() {
-        latestAlternateOptions = List.of();
-        alternateSuggestionsLoading = false;
-        alternateSuggestionsStatus = "";
-    }
-
-    private <T> void runAsync(CheckedSupplier<T> supplier, Consumer<T> onSuccess, Consumer<Throwable> onError) {
-        CompletableFuture.supplyAsync(() -> {
-            try {
-                return supplier.get();
-            } catch (Exception exception) {
-                throw new RuntimeException(exception);
-            }
-        }, backgroundExecutor).whenComplete((result, throwable) -> Platform.runLater(() -> {
-            if (throwable == null) {
-                onSuccess.accept(result);
-            } else {
-                Throwable cause = throwable.getCause() != null ? throwable.getCause() : throwable;
-                onError.accept(cause);
-            }
-        }));
-    }
-
-    private void loadMetarHistoryAsync(String airportId) {
-        String normalizedAirportId = normalizeAirportId(airportId);
-        if (!metarHistoryLoading.add(normalizedAirportId)) {
-            return;
-        }
-
-        runAsync(
-                () -> weatherService.fetchMetarHistory(normalizedAirportId, 12),
-                history -> {
-                    metarHistoryLoading.remove(normalizedAirportId);
-                    metarHistoryCache.put(normalizedAirportId, history);
-                    if (history.isEmpty()) {
-                        metarHistoryStatusCache.put(normalizedAirportId, "FAA returned no recent METAR history for this airport.");
-                    } else {
-                        metarHistoryStatusCache.remove(normalizedAirportId);
-                    }
-                    rerenderWeatherCards();
-                    rerenderRouteResults();
-                },
-                throwable -> {
-                    metarHistoryLoading.remove(normalizedAirportId);
-                    metarHistoryStatusCache.put(normalizedAirportId, "Could not load recent METAR history: " + throwable.getMessage());
-                    rerenderWeatherCards();
-                    rerenderRouteResults();
-                }
-        );
-    }
-
-    private void resetLazyHistoryStatuses(List<AirportWeather> airportWeather) {
-        for (AirportWeather weather : airportWeather) {
-            String airportId = normalizeAirportId(weather.metar().airportId());
-            if (!metarHistoryCache.containsKey(airportId) && !metarHistoryLoading.contains(airportId)) {
-                metarHistoryStatusCache.remove(airportId);
+            getHostServices().showDocument(url);
+        } catch (Exception exception) {
+            if (routeView != null && routeView.getStatusLabel() != null) {
+                routeView.getStatusLabel().setText("Could not open browser: " + exception.getMessage());
             }
         }
     }
 
-    private String normalizeAirportId(String airportId) {
-        return airportId == null ? "" : airportId.trim().toUpperCase();
-    }
-
-    @FunctionalInterface
-    private interface CheckedSupplier<T> {
-        T get() throws Exception;
-    }
-
-    private enum AppView {
+    enum AppView {
         WEATHER("Weather", "Live airport weather"),
         ROUTE("Route Planner", "Flight planning and go/no-go"),
         AIRCRAFT("Aircraft", "Profiles and performance"),
@@ -2862,11 +431,11 @@ public class MainApp extends Application {
             this.tagline = tagline;
         }
 
-        private String displayName() {
+        String displayName() {
             return displayName;
         }
 
-        private String tagline() {
+        String tagline() {
             return tagline;
         }
     }

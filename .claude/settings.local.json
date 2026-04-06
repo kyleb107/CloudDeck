@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs wc:*)",
+      "Bash(find /c/Users/Kyle/IdeaProjects/clouddeck2/src/main/java -name \"*.java\" -exec wc -l {} +)",
+      "Bash(find /c/Users/Kyle/IdeaProjects/clouddeck2/src/test/java -name \"*.java\" -exec wc -l {} +)",
+      "Bash(git -C /c/Users/Kyle/IdeaProjects/clouddeck2 log --oneline)"
+    ]
+  }
+}
