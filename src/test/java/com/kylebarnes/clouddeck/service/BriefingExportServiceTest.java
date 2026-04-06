@@ -85,7 +85,8 @@ class BriefingExportServiceTest {
                         List.of(new TafPeriod("FM011200", "FM", LocalDateTime.of(2026, 4, 1, 12, 0), LocalDateTime.of(2026, 4, 1, 18, 0), 180, 10, 0, 6.0f, List.of(new CloudLayer("SCT", 5000)), List.of(), "FM011200 18010KT P6SM SCT050"))
                 ),
                 List.of(new com.kylebarnes.clouddeck.model.Runway("18", 180)),
-                List.of()
+                List.of(),
+                null
         );
     }
 }

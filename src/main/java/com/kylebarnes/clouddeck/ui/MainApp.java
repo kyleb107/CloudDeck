@@ -100,6 +100,7 @@ import java.nio.file.Path;
 import java.util.stream.Collectors;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
+import java.util.Set;
 
 public class MainApp extends Application {
     private static final String CARD_SHADOW = "dropshadow(gaussian, rgba(0,0,0,0.18), 18, 0.2, 0, 6)";
@@ -150,6 +151,11 @@ public class MainApp extends Application {
     private static final DateTimeFormatter ROUTE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final DateTimeFormatter CLOCK_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private final Map<String, Image> airportDiagramImageCache = new ConcurrentHashMap<>();
+    private final Map<String, String> airportDiagramStatusCache = new ConcurrentHashMap<>();
+    private final Set<String> airportDiagramLoading = ConcurrentHashMap.newKeySet();
+    private final Map<String, List<MetarData>> metarHistoryCache = new ConcurrentHashMap<>();
+    private final Map<String, String> metarHistoryStatusCache = new ConcurrentHashMap<>();
+    private final Set<String> metarHistoryLoading = ConcurrentHashMap.newKeySet();
 
     private ThemePalette themePalette;
     private AppSettings appSettings;
@@ -248,7 +254,7 @@ public class MainApp extends Application {
     private VBox buildAppHeader() {
         VBox header = new VBox(18);
         header.setPadding(new Insets(26, 28, 18, 28));
-        header.setStyle("-fx-background-color: rgba(7, 13, 22, 0.24);");
+        header.setStyle("-fx-background-color: " + themePalette.headerOverlay() + ";");
 
         Label eyebrow = new Label("Pilot briefing workspace");
         eyebrow.setStyle("-fx-text-fill: " + themePalette.accentGold() + "; -fx-font-size: 12px; -fx-font-weight: bold;");
@@ -326,6 +332,7 @@ public class MainApp extends Application {
                     () -> weatherService.fetchAirportWeather(input),
                     weather -> {
                         latestWeatherResults = weather;
+                        resetLazyHistoryStatuses(weather);
                         rerenderWeatherCards();
                         statusLabel.setText("");
                         refreshFavoritesBar(weatherAirportInput);
@@ -373,7 +380,7 @@ public class MainApp extends Application {
         }
         routeDepartureTimeInput = createInputField("Departure UTC yyyy-MM-dd HH:mm", 240);
         routeDepartureTimeInput.setText(routeDepartureTimeInput.getText().isBlank()
-                ? LocalDateTime.now().plusHours(1).withMinute(0).withSecond(0).withNano(0).format(ROUTE_TIME_FORMATTER)
+                ? LocalDateTime.now(ZoneOffset.UTC).plusHours(1).withMinute(0).withSecond(0).withNano(0).format(ROUTE_TIME_FORMATTER)
                 : routeDepartureTimeInput.getText());
         attachAutocomplete(routeDepartureInput, stage);
         attachAutocomplete(routeDestinationInput, stage);
@@ -747,7 +754,7 @@ public class MainApp extends Application {
         String categoryColor = categoryColor(metar.flightCategory());
 
         Label airportLabel = new Label(metar.airportId());
-        airportLabel.setStyle("-fx-text-fill: white; -fx-font-size: 22px; -fx-font-weight: bold;");
+        airportLabel.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 22px; -fx-font-weight: bold;");
 
         Label categoryBadge = createBadge(metar.flightCategory(), categoryColor);
         Label profileBadge = selectedProfile == null
@@ -789,12 +796,12 @@ public class MainApp extends Application {
         );
 
         VBox airportBriefingSection = buildAirportBriefingSection(airportInfo, metar);
-        VBox trendSection = buildTrendSection(airportWeather.metarHistory());
-        VBox tafSection = buildTafSection(airportWeather.taf());
+        VBox trendSection = buildTrendSection(airportWeather);
+        VBox tafSection = buildTafSection(airportWeather);
         VBox runwaySection = buildRunwaySection(metar, airportWeather.runways(), categoryColor, selectedProfile);
 
         Label rawLabel = makeInfoLabel("Raw METAR: " + metar.rawObservation());
-        rawLabel.setStyle("-fx-text-fill: #7f95ab; -fx-font-family: 'Courier New'; -fx-font-size: 11px;");
+        rawLabel.setStyle(monospaceMutedStyle());
         rawLabel.setWrapText(true);
 
         card.getChildren().addAll(header, nameLabel, metricStrip, vfrLabel, detailsLabel, airportBriefingSection, trendSection, tafSection, runwaySection, rawLabel);
@@ -871,10 +878,26 @@ public class MainApp extends Application {
         return chartBox;
     }
 
-    private VBox buildTrendSection(List<MetarData> history) {
+    private VBox buildTrendSection(AirportWeather airportWeather) {
         VBox section = new VBox(6);
         section.getChildren().add(new Separator());
         section.getChildren().add(createSubsectionTitle("Trend Snapshot"));
+
+        String airportId = normalizeAirportId(airportWeather.metar().airportId());
+        List<MetarData> history = metarHistoryCache.getOrDefault(airportId, airportWeather.metarHistory());
+        String historyStatus = metarHistoryStatusCache.get(airportId);
+
+        if (history.isEmpty()) {
+            if (historyStatus != null) {
+                section.getChildren().add(createMutedLabel(historyStatus));
+                return section;
+            }
+
+            metarHistoryStatusCache.put(airportId, "Loading recent METAR history...");
+            loadMetarHistoryAsync(airportId);
+            section.getChildren().add(createMutedLabel("Loading recent METAR history..."));
+            return section;
+        }
 
         MetarTrendSummary trendSummary = metarTrendService.summarize(history, appSettings);
         if (trendSummary == null) {
@@ -902,6 +925,7 @@ public class MainApp extends Application {
 
     private VBox buildAirportDiagramPreviewBox(String airportId) {
         VBox previewBox = new VBox(6);
+        String normalizedAirportId = normalizeAirportId(airportId);
 
         Label previewTitle = createMutedLabel("Airport diagram preview");
         ImageView imageView = new ImageView();
@@ -918,45 +942,60 @@ public class MainApp extends Application {
                         "-fx-background-radius: 14; -fx-border-radius: 14;"
         );
 
-        Image cachedImage = airportDiagramImageCache.get(airportId);
+        Image cachedImage = airportDiagramImageCache.get(normalizedAirportId);
         if (cachedImage != null) {
             imageView.setImage(cachedImage);
             statusLabel.setText("Click the image to open the full FAA PDF.");
-            imageView.setOnMouseClicked(event -> openAirportDiagramPdf(airportId));
+            imageView.setOnMouseClicked(event -> openAirportDiagramPdf(normalizedAirportId));
+        } else if (airportDiagramStatusCache.containsKey(normalizedAirportId)) {
+            statusLabel.setText(airportDiagramStatusCache.get(normalizedAirportId));
         } else {
-            runAsync(
-                    () -> airportDiagramService.loadPreview(airportId),
-                    preview -> {
-                        if (preview == null) {
-                            statusLabel.setText("FAA airport diagram preview unavailable for this airport.");
-                            return;
+            if (airportDiagramLoading.add(normalizedAirportId)) {
+                runAsync(
+                        () -> airportDiagramService.loadPreview(normalizedAirportId),
+                        preview -> {
+                            airportDiagramLoading.remove(normalizedAirportId);
+                            if (preview == null) {
+                                airportDiagramStatusCache.put(normalizedAirportId, "FAA airport diagram preview unavailable for this airport.");
+                            } else {
+                                try {
+                                    Image image = new Image(preview.imagePath().toUri().toString(), true);
+                                    airportDiagramImageCache.put(normalizedAirportId, image);
+                                    airportDiagramStatusCache.remove(normalizedAirportId);
+                                } catch (Exception exception) {
+                                    airportDiagramStatusCache.put(normalizedAirportId, "Diagram loaded, but the preview image could not be displayed.");
+                                }
+                            }
+                            rerenderWeatherCards();
+                            rerenderRouteResults();
+                        },
+                        throwable -> {
+                            airportDiagramLoading.remove(normalizedAirportId);
+                            airportDiagramStatusCache.put(normalizedAirportId, "Could not load FAA diagram preview: " + throwable.getMessage());
+                            rerenderWeatherCards();
+                            rerenderRouteResults();
                         }
-
-                        try {
-                            Image image = new Image(preview.imagePath().toUri().toString(), true);
-                            airportDiagramImageCache.put(airportId, image);
-                            imageView.setImage(image);
-                            imageView.setOnMouseClicked(event -> openExternalUrl(preview.pdfUrl()));
-                            statusLabel.setText("Click the image to open the full FAA PDF.");
-                        } catch (Exception exception) {
-                            statusLabel.setText("Diagram loaded, but the preview image could not be displayed.");
-                        }
-                    },
-                    throwable -> statusLabel.setText("Could not load FAA diagram preview: " + throwable.getMessage())
-            );
+                );
+            }
         }
 
         previewBox.getChildren().addAll(previewTitle, imageFrame);
         return previewBox;
     }
 
-    private VBox buildTafSection(TafData taf) {
+    private VBox buildTafSection(AirportWeather airportWeather) {
         VBox section = new VBox(6);
         section.getChildren().add(new Separator());
         section.getChildren().add(createSubsectionTitle("TAF Outlook"));
 
+        TafData taf = airportWeather.taf();
         if (taf == null) {
-            section.getChildren().add(createMutedLabel("TAF unavailable for this airport."));
+            String tafStatus = airportWeather.tafStatusMessage();
+            section.getChildren().add(createMutedLabel(
+                    tafStatus == null || tafStatus.isBlank()
+                            ? "TAF unavailable for this airport."
+                            : tafStatus
+            ));
             return section;
         }
 
@@ -984,7 +1023,7 @@ public class MainApp extends Application {
         }
 
         Label rawTafLabel = makeInfoLabel("Raw TAF: " + taf.rawText());
-        rawTafLabel.setStyle("-fx-text-fill: #7f95ab; -fx-font-family: 'Courier New'; -fx-font-size: 11px;");
+        rawTafLabel.setStyle(monospaceMutedStyle());
         rawTafLabel.setWrapText(true);
         section.getChildren().add(rawTafLabel);
         return section;
@@ -1281,8 +1320,8 @@ public class MainApp extends Application {
         VBox sections = new VBox(
                 10,
                 buildAirportBriefingSection(airportWeather.airportInfo(), metar),
-                buildTrendSection(airportWeather.metarHistory()),
-                buildTafSection(airportWeather.taf()),
+                buildTrendSection(airportWeather),
+                buildTafSection(airportWeather),
                 buildRunwaySection(metar, airportWeather.runways(), categoryColor(metar.flightCategory()), selectedProfile)
         );
 
@@ -1330,7 +1369,7 @@ public class MainApp extends Application {
             VBox optionCard = new VBox(4, title, badges, summaryLabel, runwayLabel);
             optionCard.setPadding(new Insets(12));
             optionCard.setStyle(
-                    "-fx-background-color: rgba(255,255,255,0.04); -fx-border-color: rgba(255,255,255,0.06); " +
+                    "-fx-background-color: " + themePalette.insetBackground() + "; -fx-border-color: " + themePalette.insetBorder() + "; " +
                             "-fx-background-radius: 14; -fx-border-radius: 14;"
             );
             alternatesList.getChildren().add(optionCard);
@@ -1673,6 +1712,7 @@ public class MainApp extends Application {
                 () -> weatherService.fetchAirportWeather(departure + "," + destination),
                 weather -> {
                     latestRouteResults = weather;
+                    resetLazyHistoryStatuses(weather);
                     routeHistoryRepository.saveRecentRoute(departure, destination, plannedDepartureUtc);
                     invalidateAlternateSuggestions();
                     refreshRecentRoutes();
@@ -1975,10 +2015,14 @@ public class MainApp extends Application {
     private Label createBadge(String text, String color) {
         Label badge = new Label(text);
         badge.setStyle(
-                "-fx-background-color: rgba(255,255,255,0.07); -fx-text-fill: " + color + "; -fx-font-size: 11px; " +
+                "-fx-background-color: " + themePalette.badgeBackground() + "; -fx-text-fill: " + color + "; -fx-font-size: 11px; " +
                         "-fx-font-weight: bold; -fx-background-radius: 12; -fx-padding: 4px 10px;"
         );
         return badge;
+    }
+
+    private String monospaceMutedStyle() {
+        return "-fx-text-fill: " + themePalette.codeText() + "; -fx-font-family: 'Courier New'; -fx-font-size: 11px;";
     }
 
     private Button createPrimaryButton(String text) {
@@ -2233,6 +2277,47 @@ public class MainApp extends Application {
                 onError.accept(cause);
             }
         }));
+    }
+
+    private void loadMetarHistoryAsync(String airportId) {
+        String normalizedAirportId = normalizeAirportId(airportId);
+        if (!metarHistoryLoading.add(normalizedAirportId)) {
+            return;
+        }
+
+        runAsync(
+                () -> weatherService.fetchMetarHistory(normalizedAirportId, 12),
+                history -> {
+                    metarHistoryLoading.remove(normalizedAirportId);
+                    metarHistoryCache.put(normalizedAirportId, history);
+                    if (history.isEmpty()) {
+                        metarHistoryStatusCache.put(normalizedAirportId, "FAA returned no recent METAR history for this airport.");
+                    } else {
+                        metarHistoryStatusCache.remove(normalizedAirportId);
+                    }
+                    rerenderWeatherCards();
+                    rerenderRouteResults();
+                },
+                throwable -> {
+                    metarHistoryLoading.remove(normalizedAirportId);
+                    metarHistoryStatusCache.put(normalizedAirportId, "Could not load recent METAR history: " + throwable.getMessage());
+                    rerenderWeatherCards();
+                    rerenderRouteResults();
+                }
+        );
+    }
+
+    private void resetLazyHistoryStatuses(List<AirportWeather> airportWeather) {
+        for (AirportWeather weather : airportWeather) {
+            String airportId = normalizeAirportId(weather.metar().airportId());
+            if (!metarHistoryCache.containsKey(airportId) && !metarHistoryLoading.contains(airportId)) {
+                metarHistoryStatusCache.remove(airportId);
+            }
+        }
+    }
+
+    private String normalizeAirportId(String airportId) {
+        return airportId == null ? "" : airportId.trim().toUpperCase();
     }
 
     @FunctionalInterface

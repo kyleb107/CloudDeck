@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -61,7 +62,7 @@ public class LocalRouteHistoryRepository implements RouteHistoryRepository {
 
         byRoute.put(
                 routeKey(normalizedDeparture, normalizedDestination),
-                new RecentRouteEntry(normalizedDeparture, normalizedDestination, plannedDepartureUtc, LocalDateTime.now())
+                new RecentRouteEntry(normalizedDeparture, normalizedDestination, plannedDepartureUtc, LocalDateTime.now(ZoneOffset.UTC))
         );
 
         List<RecentRouteEntry> entries = new ArrayList<>(byRoute.values());

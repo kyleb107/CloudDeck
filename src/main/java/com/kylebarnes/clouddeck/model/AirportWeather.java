@@ -7,6 +7,7 @@ public record AirportWeather(
         MetarData metar,
         TafData taf,
         List<Runway> runways,
-        List<MetarData> metarHistory
+        List<MetarData> metarHistory,
+        String tafStatusMessage
 ) {
 }

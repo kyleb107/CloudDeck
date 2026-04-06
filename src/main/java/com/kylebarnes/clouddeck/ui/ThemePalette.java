@@ -25,7 +25,12 @@ record ThemePalette(
         String bannerGo,
         String bannerCaution,
         String bannerNoGo,
-        String favoriteRemoveColor
+        String favoriteRemoveColor,
+        String headerOverlay,
+        String codeText,
+        String insetBackground,
+        String insetBorder,
+        String badgeBackground
 ) {
     static ThemePalette forPreset(ThemePreset preset) {
         if (preset == ThemePreset.CLEARSKY) {
@@ -52,7 +57,12 @@ record ThemePalette(
                     "rgba(56, 153, 108, 0.18)",
                     "rgba(194, 142, 44, 0.18)",
                     "rgba(199, 85, 85, 0.18)",
-                    "#70879b"
+                    "#70879b",
+                    "rgba(255,255,255,0.74)",
+                    "#557084",
+                    "rgba(19,33,48,0.04)",
+                    "#d6e4ee",
+                    "rgba(19,33,48,0.06)"
             );
         }
 
@@ -79,7 +89,12 @@ record ThemePalette(
                 "rgba(36, 118, 77, 0.35)",
                 "rgba(167, 102, 28, 0.35)",
                 "rgba(153, 50, 50, 0.35)",
-                "#8ca2b8"
+                "#8ca2b8",
+                "rgba(7,13,22,0.24)",
+                "#7f95ab",
+                "rgba(255,255,255,0.04)",
+                "rgba(255,255,255,0.06)",
+                "rgba(255,255,255,0.07)"
         );
     }
 }

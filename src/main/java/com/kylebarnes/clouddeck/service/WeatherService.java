@@ -68,8 +68,7 @@ public class WeatherService {
             throw new Exception("No METAR data returned for: " + String.join(", ", missingIds));
         }
 
-        Map<String, TafData> tafByAirport = fetchTafsSafely(airportIds);
-        Map<String, List<MetarData>> historyByAirport = fetchHistorySafely(airportIds, 12);
+        TafFetchResult tafFetchResult = fetchTafs(airportIds);
 
         metars.sort((left, right) ->
                 Integer.compare(airportIds.indexOf(left.airportId()), airportIds.indexOf(right.airportId()))
@@ -81,12 +80,23 @@ public class WeatherService {
             airportWeather.add(new AirportWeather(
                     airportInfo,
                     metar,
-                    tafByAirport.get(metar.airportId()),
+                    tafFetchResult.tafByAirport().get(metar.airportId()),
                     airportsRepository.findRunways(metar.airportId()),
-                    historyByAirport.getOrDefault(metar.airportId(), List.of())
+                    List.of(),
+                    tafFetchResult.statusMessage()
             ));
         }
         return airportWeather;
+    }
+
+    public List<MetarData> fetchMetarHistory(String airportId, int hours) throws Exception {
+        if (airportId == null || airportId.isBlank()) {
+            return List.of();
+        }
+
+        String normalizedAirportId = airportId.trim().toUpperCase();
+        return fetchHistoryByAirport(List.of(normalizedAirportId), hours)
+                .getOrDefault(normalizedAirportId, List.of());
     }
 
     public List<String> parseAirportIds(String input) {
@@ -116,19 +126,23 @@ public class WeatherService {
         return historyByAirport;
     }
 
-    private Map<String, TafData> fetchTafsSafely(List<String> airportIds) {
+    private TafFetchResult fetchTafs(List<String> airportIds) {
         try {
-            return tafParser.parseMany(tafClient.fetchRawTafs(String.join(",", airportIds)));
+            return new TafFetchResult(
+                    tafParser.parseMany(tafClient.fetchRawTafs(String.join(",", airportIds))),
+                    null
+            );
         } catch (Exception exception) {
-            return Map.of();
+            return new TafFetchResult(
+                    Map.of(),
+                    "Could not load TAF data: " + exception.getMessage()
+            );
         }
     }
 
-    private Map<String, List<MetarData>> fetchHistorySafely(List<String> airportIds, int hours) {
-        try {
-            return fetchHistoryByAirport(airportIds, hours);
-        } catch (Exception exception) {
-            return Map.of();
-        }
+    private record TafFetchResult(
+            Map<String, TafData> tafByAirport,
+            String statusMessage
+    ) {
     }
 }

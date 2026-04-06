@@ -79,7 +79,8 @@ class FlightConditionEvaluatorTest {
                         List.of(new TafPeriod("FM011200", "FM", departureTime.minusHours(1), departureTime.plusHours(4), 180, 10, 0, 6.0f, List.of(new CloudLayer("SCT", 5000)), List.of(), "FM011200 18010KT P6SM SCT050"))
                 ),
                 List.of(),
-                List.of()
+                List.of(),
+                null
         );
         AirportWeather destination = new AirportWeather(
                 null,
@@ -98,7 +99,8 @@ class FlightConditionEvaluatorTest {
                         )
                 ),
                 List.of(),
-                List.of()
+                List.of(),
+                null
         );
 
         TimedRouteAssessment assessment = evaluator.assessTimedRoute(
