@@ -1539,22 +1539,23 @@ public class MainApp extends Application {
 
             Button useButton = createSecondaryButton("Run Saved Route");
             useButton.setOnAction(event -> {
-                latestRouteDeparture = entry.departureAirport();
-                latestRouteDestination = entry.destinationAirport();
-                if (routeDepartureInput != null) {
-                    routeDepartureInput.setText(entry.departureAirport());
-                }
-                if (routeDestinationInput != null) {
-                    routeDestinationInput.setText(entry.destinationAirport());
-                }
-                if (routeDepartureTimeInput != null) {
-                    routeDepartureTimeInput.setText(entry.plannedDepartureUtc().format(ROUTE_TIME_FORMATTER));
-                }
+                populateRouteInputs(entry.departureAirport(), entry.destinationAirport(), entry.plannedDepartureUtc());
                 analyzeRoute(entry.departureAirport(), entry.destinationAirport(), entry.plannedDepartureUtc());
             });
 
-            HBox header = new HBox(12, routeLabel, new Region(), useButton);
-            HBox.setHgrow(header.getChildren().get(1), Priority.ALWAYS);
+            Button editTimeButton = createGhostButton("Edit Time");
+            editTimeButton.setOnAction(event -> {
+                populateRouteInputs(entry.departureAirport(), entry.destinationAirport(), entry.plannedDepartureUtc());
+                if (routeDepartureTimeInput != null) {
+                    routeDepartureTimeInput.requestFocus();
+                    routeDepartureTimeInput.selectAll();
+                }
+                routeStatusLabel.setText("Route loaded. Adjust the UTC departure time, then click Analyze Route.");
+            });
+
+            Region spacer = new Region();
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+            HBox header = new HBox(10, routeLabel, spacer, useButton, editTimeButton);
 
             VBox routeCard = new VBox(4, header, metaLabel);
             routeCard.setPadding(new Insets(12));
@@ -1563,6 +1564,20 @@ public class MainApp extends Application {
                             "-fx-background-radius: 14; -fx-border-radius: 14;"
             );
             recentRoutesBox.getChildren().add(routeCard);
+        }
+    }
+
+    private void populateRouteInputs(String departure, String destination, LocalDateTime plannedDepartureUtc) {
+        latestRouteDeparture = departure;
+        latestRouteDestination = destination;
+        if (routeDepartureInput != null) {
+            routeDepartureInput.setText(departure);
+        }
+        if (routeDestinationInput != null) {
+            routeDestinationInput.setText(destination);
+        }
+        if (routeDepartureTimeInput != null && plannedDepartureUtc != null) {
+            routeDepartureTimeInput.setText(plannedDepartureUtc.format(ROUTE_TIME_FORMATTER));
         }
     }
 
@@ -1614,17 +1629,7 @@ public class MainApp extends Application {
             return;
         }
 
-        latestRouteDeparture = departure;
-        latestRouteDestination = destination;
-        if (routeDepartureInput != null) {
-            routeDepartureInput.setText(departure);
-        }
-        if (routeDestinationInput != null) {
-            routeDestinationInput.setText(destination);
-        }
-        if (routeDepartureTimeInput != null) {
-            routeDepartureTimeInput.setText(plannedDepartureUtc.format(ROUTE_TIME_FORMATTER));
-        }
+        populateRouteInputs(departure, destination, plannedDepartureUtc);
 
         routeResultsBox.getChildren().setAll(routeStatusLabel);
         routeStatusLabel.setText("Fetching route weather and forecast data...");
