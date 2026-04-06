@@ -33,6 +33,7 @@ import com.kylebarnes.clouddeck.service.DensityAltitudeService;
 import com.kylebarnes.clouddeck.service.AlternateAirportService;
 import com.kylebarnes.clouddeck.service.AirportDiagramService;
 import com.kylebarnes.clouddeck.service.BriefingExportService;
+import com.kylebarnes.clouddeck.service.BriefingExportResult;
 import com.kylebarnes.clouddeck.service.FaaChartLinkService;
 import com.kylebarnes.clouddeck.service.FlightConditionEvaluator;
 import com.kylebarnes.clouddeck.service.FlightPlanningService;
@@ -441,7 +442,7 @@ public class MainApp extends Application {
                         routeAssessment,
                         timedRouteAssessment
                 );
-                Path exportPath = briefingExportService.exportRouteBriefing(
+                BriefingExportResult exportResult = briefingExportService.exportRouteBriefing(
                         routePlan,
                         aircraftProfile,
                         latestRouteResults,
@@ -451,7 +452,7 @@ public class MainApp extends Application {
                         latestAlternateOptions,
                         appSettings
                 );
-                routeStatusLabel.setText("Briefing exported to " + exportPath);
+                routeStatusLabel.setText("Briefing exported: " + exportResult.textPath().getFileName() + " and " + exportResult.pdfPath().getFileName());
             } catch (Exception exception) {
                 routeStatusLabel.setText("Could not export briefing: " + exception.getMessage());
             }

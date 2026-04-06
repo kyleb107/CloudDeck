@@ -9,6 +9,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -19,19 +20,26 @@ import java.util.Map;
 public class OurAirportsRepository {
     private static final String AIRPORTS_CSV_URL = "https://davidmegginson.github.io/ourairports-data/airports.csv";
     private static final String RUNWAYS_CSV_URL = "https://davidmegginson.github.io/ourairports-data/runways.csv";
+    private static final Duration CSV_CACHE_TTL = Duration.ofHours(24);
 
     private final HttpClient httpClient;
+    private final LocalDataCache dataCache;
 
     private volatile Map<String, AirportInfo> airportInfoByIdent;
     private volatile List<AirportSuggestion> airportSuggestions;
     private volatile Map<String, List<Runway>> runwaysByAirport;
 
     public OurAirportsRepository() {
-        this(HttpClient.newHttpClient());
+        this(HttpClient.newHttpClient(), new LocalDataCache());
     }
 
     public OurAirportsRepository(HttpClient httpClient) {
+        this(httpClient, new LocalDataCache());
+    }
+
+    OurAirportsRepository(HttpClient httpClient, LocalDataCache dataCache) {
         this.httpClient = httpClient;
+        this.dataCache = dataCache;
     }
 
     public AirportInfo findAirportByIcao(String icaoId) {
@@ -235,12 +243,20 @@ public class OurAirportsRepository {
     }
 
     private String fetchCsv(String url) throws Exception {
+        String namespace = url.contains("runways") ? "ourairports-runways" : "ourairports-airports";
+        return dataCache.getText(namespace, url, CSV_CACHE_TTL, () -> fetchText(url));
+    }
+
+    private String fetchText(String url) throws Exception {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        return response.body();
+        if (response.statusCode() >= 400) {
+            throw new Exception("OurAirports returned status " + response.statusCode());
+        }
+        return response.body() == null ? "" : response.body();
     }
 
     private String clean(String value) {
