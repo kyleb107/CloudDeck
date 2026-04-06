@@ -18,7 +18,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -34,12 +33,12 @@ public class AirportDiagramService {
     }
 
     AirportDiagramService(HttpClient httpClient, FaaChartLinkService faaChartLinkService) {
-        this.httpClient = httpClient;
-        this.faaChartLinkService = faaChartLinkService;
+        this.httpClient = httpClient == null ? HttpClient.newHttpClient() : httpClient;
+        this.faaChartLinkService = faaChartLinkService == null ? new FaaChartLinkService() : faaChartLinkService;
     }
 
     public AirportDiagramPreview loadPreview(String airportId) throws Exception {
-        String normalizedAirportId = airportId == null ? "" : airportId.trim().toUpperCase();
+        String normalizedAirportId = normalizeAirportId(airportId);
         if (normalizedAirportId.isBlank()) {
             return null;
         }
@@ -74,6 +73,10 @@ public class AirportDiagramService {
         try (InputStream inputStream = response.body()) {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setNamespaceAware(false);
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setExpandEntityReferences(false);
             document = factory.newDocumentBuilder().parse(inputStream);
         }
 
@@ -85,8 +88,8 @@ public class AirportDiagramService {
                 continue;
             }
 
-            String aptIdent = airportElement.getAttribute("apt_ident").trim().toUpperCase();
-            String icaoIdent = airportElement.getAttribute("icao_ident").trim().toUpperCase();
+            String aptIdent = normalizeAirportId(airportElement.getAttribute("apt_ident"));
+            String icaoIdent = normalizeAirportId(airportElement.getAttribute("icao_ident"));
             NodeList children = airportElement.getChildNodes();
             for (int childIndex = 0; childIndex < children.getLength(); childIndex++) {
                 Node child = children.item(childIndex);
@@ -126,12 +129,11 @@ public class AirportDiagramService {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(faaChartLinkService.buildPdfUrl(pdfName)))
                 .build();
-        HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        HttpResponse<Path> response = httpClient.send(request, HttpResponse.BodyHandlers.ofFile(pdfPath));
         if (response.statusCode() >= 400) {
-            throw new IOException("FAA diagram PDF returned status " + response.statusCode());
+            Files.deleteIfExists(pdfPath);
+            throw new IOException("Failed to download PDF, status " + response.statusCode());
         }
-
-        Files.write(pdfPath, response.body());
         return pdfPath;
     }
 
@@ -158,6 +160,10 @@ public class AirportDiagramService {
             return "";
         }
         return nodes.item(0).getTextContent().trim();
+    }
+
+    private String normalizeAirportId(String airportId) {
+        return airportId == null ? "" : airportId.trim().toUpperCase();
     }
 
     private Path cacheDirectory() {

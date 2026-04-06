@@ -46,13 +46,27 @@ public class FaaChartLinkService {
     }
 
     String currentAiracCycle(LocalDate dateUtc) {
-        if (dateUtc == null || dateUtc.isBefore(AIRAC_BASE_DATE)) {
+        if (dateUtc == null) {
             return String.format("%02d%02d", AIRAC_BASE_YEAR, AIRAC_BASE_CYCLE);
         }
 
         LocalDate cycleStart = AIRAC_BASE_DATE;
         int cycleYear = AIRAC_BASE_YEAR;
         int cycleNumber = AIRAC_BASE_CYCLE;
+
+        if (dateUtc.isBefore(cycleStart)) {
+            while (dateUtc.isBefore(cycleStart)) {
+                cycleStart = cycleStart.minusDays(28);
+                int previousYear = cycleStart.getYear() % 100;
+                if (previousYear != cycleYear) {
+                    cycleYear = previousYear;
+                    cycleNumber = countCyclesInYear(cycleStart.getYear());
+                } else {
+                    cycleNumber -= 1;
+                }
+            }
+            return String.format("%02d%02d", cycleYear, cycleNumber);
+        }
 
         while (!dateUtc.isBefore(cycleStart.plusDays(28))) {
             cycleStart = cycleStart.plusDays(28);
@@ -66,6 +80,18 @@ public class FaaChartLinkService {
         }
 
         return String.format("%02d%02d", cycleYear, cycleNumber);
+    }
+
+    private int countCyclesInYear(int year) {
+        LocalDate startOfYear = LocalDate.of(year, 1, 1);
+        LocalDate startOfNextYear = LocalDate.of(year + 1, 1, 1);
+        int cycles = 0;
+        LocalDate cursor = startOfYear;
+        while (cursor.isBefore(startOfNextYear)) {
+            cycles++;
+            cursor = cursor.plusDays(28);
+        }
+        return cycles;
     }
 
     String faaSearchId(String airportId) {
