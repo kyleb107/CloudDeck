@@ -172,6 +172,8 @@ public class MainApp extends Application {
     private TextField routeDepartureInput;
     private TextField routeDestinationInput;
     private TextField routeDepartureTimeInput;
+    private ComboBox<TimeDisplayMode> routeTimeModeBox;
+    private Label routeTimeHelperLabel;
     private List<AirportWeather> latestWeatherResults = List.of();
     private List<AirportWeather> latestRouteResults = List.of();
     private List<AlternateAirportOption> latestAlternateOptions = List.of();
@@ -384,12 +386,31 @@ public class MainApp extends Application {
         if (latestRouteDestination != null && !latestRouteDestination.isBlank()) {
             routeDestinationInput.setText(latestRouteDestination);
         }
-        routeDepartureTimeInput = createInputField("Departure UTC yyyy-MM-dd HH:mm", 240);
+        routeTimeModeBox = new ComboBox<>();
+        routeTimeModeBox.getItems().setAll(TimeDisplayMode.UTC, TimeDisplayMode.LOCAL);
+        routeTimeModeBox.setValue(appSettings.timeDisplayMode());
+        routeTimeModeBox.setPrefWidth(140);
+        routeDepartureTimeInput = createInputField("Departure time yyyy-MM-dd HH:mm", 240);
         routeDepartureTimeInput.setText(routeDepartureTimeInput.getText().isBlank()
-                ? LocalDateTime.now(ZoneOffset.UTC).plusHours(1).withMinute(0).withSecond(0).withNano(0).format(ROUTE_TIME_FORMATTER)
+                ? formatRouteInputValue(
+                        LocalDateTime.now(ZoneOffset.UTC).plusHours(1).withMinute(0).withSecond(0).withNano(0),
+                        routeTimeModeBox.getValue()
+                )
                 : routeDepartureTimeInput.getText());
+        routeTimeHelperLabel = createMutedLabel("");
+        routeDepartureTimeInput.textProperty().addListener((observable, oldValue, newValue) -> updateRouteTimeHelper());
+        routeTimeModeBox.valueProperty().addListener((observable, oldValue, newValue) -> {
+            if (oldValue != null && newValue != null && routeDepartureTimeInput != null && !routeDepartureTimeInput.getText().isBlank()) {
+                LocalDateTime parsedTimeUtc = parseRouteTimeInput(routeDepartureTimeInput.getText(), oldValue);
+                if (parsedTimeUtc != null) {
+                    routeDepartureTimeInput.setText(formatRouteInputValue(parsedTimeUtc, newValue));
+                }
+            }
+            updateRouteTimeHelper();
+        });
         attachAutocomplete(routeDepartureInput, stage);
         attachAutocomplete(routeDestinationInput, stage);
+        updateRouteTimeHelper();
 
         Button planButton = createPrimaryButton("Analyze Route");
         Button exportButton = createSecondaryButton("Export Briefing");
@@ -1587,10 +1608,10 @@ public class MainApp extends Application {
                 ? null
                 : departureTimeUtc.plusMinutes((long) Math.round(routePlan.estimatedTimeHours() * 60));
         if (departureTimeUtc != null && arrivalTimeUtc != null) {
-            metrics.getChildren().add(createMetricCard("Departure " + timeDisplayShortLabel(), formatDateTime(departureTimeUtc), themePalette.accentGold()));
-            metrics.getChildren().add(createMetricCard("Arrival " + timeDisplayShortLabel(),
-                    formatDateTime(arrivalTimeUtc),
-                    themePalette.accentBlue()));
+            metrics.getChildren().add(createMetricCard("Departure UTC", formatUtcDateTime(departureTimeUtc), themePalette.accentGold()));
+            metrics.getChildren().add(createMetricCard("Departure Local", formatLocalDateTime(departureTimeUtc), themePalette.accentBlue()));
+            metrics.getChildren().add(createMetricCard("Arrival UTC", formatUtcDateTime(arrivalTimeUtc), themePalette.accentGold()));
+            metrics.getChildren().add(createMetricCard("Arrival Local", formatLocalDateTime(arrivalTimeUtc), themePalette.accentBlue()));
         }
 
         VBox densityBox = new VBox(4);
@@ -1670,7 +1691,7 @@ public class MainApp extends Application {
             routeLabel.setMaxWidth(Double.MAX_VALUE);
 
             String timestamp = "Saved departure " + entry.plannedDepartureUtc().format(ROUTE_TIME_FORMATTER)
-                    + " UTC  |  Display " + formatDateTime(entry.plannedDepartureUtc())
+                    + " UTC  |  Local " + formatLocalDateTime(entry.plannedDepartureUtc())
                     + "  |  Last used " + formatDateTime(entry.lastUsedUtc());
             Label metaLabel = createMutedLabel(timestamp);
 
@@ -1687,7 +1708,7 @@ public class MainApp extends Application {
                     routeDepartureTimeInput.requestFocus();
                     routeDepartureTimeInput.selectAll();
                 }
-                routeStatusLabel.setText("Route loaded. Adjust the UTC departure time, then click Analyze Route.");
+                routeStatusLabel.setText("Route loaded. Adjust the " + routeTimeModeLabel() + " departure time, then click Analyze Route.");
             });
 
             HBox actionRow = new HBox(10, useButton, editTimeButton);
@@ -1713,8 +1734,9 @@ public class MainApp extends Application {
             routeDestinationInput.setText(destination);
         }
         if (routeDepartureTimeInput != null && plannedDepartureUtc != null) {
-            routeDepartureTimeInput.setText(plannedDepartureUtc.format(ROUTE_TIME_FORMATTER));
+            routeDepartureTimeInput.setText(formatRouteInputValue(plannedDepartureUtc, currentRouteTimeMode()));
         }
+        updateRouteTimeHelper();
     }
 
     private VBox buildRoutePlannerControls(Button planButton, Button exportButton) {
@@ -1722,15 +1744,17 @@ public class MainApp extends Application {
 
         VBox departureBox = new VBox(6, formLabel("Departure"), routeDepartureInput);
         VBox destinationBox = new VBox(6, formLabel("Destination"), routeDestinationInput);
-        VBox timeBox = new VBox(6, formLabel("Departure UTC"), routeDepartureTimeInput);
+        VBox timeBox = new VBox(6, formLabel("Departure Time"), routeDepartureTimeInput, routeTimeHelperLabel);
+        VBox timeModeBox = new VBox(6, formLabel("Time Input"), routeTimeModeBox);
 
-        HBox firstRow = new HBox(12, departureBox, destinationBox, timeBox);
+        HBox firstRow = new HBox(12, departureBox, destinationBox, timeBox, timeModeBox);
         HBox.setHgrow(departureBox, Priority.ALWAYS);
         HBox.setHgrow(destinationBox, Priority.ALWAYS);
         HBox.setHgrow(timeBox, Priority.ALWAYS);
+        HBox.setHgrow(timeModeBox, Priority.NEVER);
 
         Label plannerHint = createMutedLabel(
-                "Uses the selected aircraft profile plus route assumptions from Settings. Analyze first, then export if needed."
+                "Uses the selected aircraft profile plus route assumptions from Settings. Enter UTC or local time, then CloudDeck converts it internally to UTC."
         );
         HBox actionRow = new HBox(10, planButton, exportButton);
         actionRow.setAlignment(Pos.CENTER_LEFT);
@@ -1749,10 +1773,9 @@ public class MainApp extends Application {
         }
 
         LocalDateTime plannedDepartureUtc;
-        try {
-            plannedDepartureUtc = LocalDateTime.parse(routeDepartureTimeInput.getText().trim(), ROUTE_TIME_FORMATTER);
-        } catch (DateTimeParseException exception) {
-            routeStatusLabel.setText("Use UTC departure time format yyyy-MM-dd HH:mm.");
+        plannedDepartureUtc = getPlannedDepartureTimeUtc();
+        if (plannedDepartureUtc == null) {
+            routeStatusLabel.setText("Use " + routeTimeModeLabel() + " departure time format yyyy-MM-dd HH:mm.");
             return;
         }
 
@@ -1761,7 +1784,7 @@ public class MainApp extends Application {
 
     private void analyzeRoute(String departure, String destination, LocalDateTime plannedDepartureUtc) {
         if (plannedDepartureUtc == null) {
-            routeStatusLabel.setText("Use UTC departure time format yyyy-MM-dd HH:mm.");
+            routeStatusLabel.setText("Use " + routeTimeModeLabel() + " departure time format yyyy-MM-dd HH:mm.");
             return;
         }
 
@@ -2227,11 +2250,63 @@ public class MainApp extends Application {
         if (routeDepartureTimeInput == null || routeDepartureTimeInput.getText().isBlank()) {
             return null;
         }
+        return parseRouteTimeInput(routeDepartureTimeInput.getText(), currentRouteTimeMode());
+    }
+
+    private LocalDateTime parseRouteTimeInput(String rawValue, TimeDisplayMode inputMode) {
+        if (rawValue == null || rawValue.isBlank() || inputMode == null) {
+            return null;
+        }
+
         try {
-            return LocalDateTime.parse(routeDepartureTimeInput.getText().trim(), ROUTE_TIME_FORMATTER);
+            LocalDateTime parsedTime = LocalDateTime.parse(rawValue.trim(), ROUTE_TIME_FORMATTER);
+            if (inputMode == TimeDisplayMode.UTC) {
+                return parsedTime;
+            }
+            return parsedTime.atZone(ZoneId.systemDefault())
+                    .withZoneSameInstant(ZoneOffset.UTC)
+                    .toLocalDateTime();
         } catch (DateTimeParseException exception) {
             return null;
         }
+    }
+
+    private String formatRouteInputValue(LocalDateTime timeUtc, TimeDisplayMode inputMode) {
+        if (timeUtc == null) {
+            return "";
+        }
+        if (inputMode == TimeDisplayMode.LOCAL) {
+            return timeUtc.atOffset(ZoneOffset.UTC)
+                    .atZoneSameInstant(ZoneId.systemDefault())
+                    .format(ROUTE_TIME_FORMATTER);
+        }
+        return timeUtc.format(ROUTE_TIME_FORMATTER);
+    }
+
+    private void updateRouteTimeHelper() {
+        if (routeTimeHelperLabel == null) {
+            return;
+        }
+
+        LocalDateTime departureTimeUtc = getPlannedDepartureTimeUtc();
+        if (departureTimeUtc == null) {
+            routeTimeHelperLabel.setText("Enter time as yyyy-MM-dd HH:mm in " + routeTimeModeLabel() + ".");
+            return;
+        }
+
+        routeTimeHelperLabel.setText(
+                "UTC: " + formatUtcDateTime(departureTimeUtc) + "  |  Local: " + formatLocalDateTime(departureTimeUtc)
+        );
+    }
+
+    private TimeDisplayMode currentRouteTimeMode() {
+        return routeTimeModeBox == null || routeTimeModeBox.getValue() == null
+                ? TimeDisplayMode.UTC
+                : routeTimeModeBox.getValue();
+    }
+
+    private String routeTimeModeLabel() {
+        return currentRouteTimeMode() == TimeDisplayMode.LOCAL ? "Local" : "UTC";
     }
 
     private String formatTemperature(float tempC) {
@@ -2303,8 +2378,7 @@ public class MainApp extends Application {
         if (appSettings.timeDisplayMode() == TimeDisplayMode.UTC) {
             return timeUtc.format(ROUTE_TIME_FORMATTER) + " UTC";
         }
-        ZonedDateTime localTime = timeUtc.atOffset(ZoneOffset.UTC).atZoneSameInstant(ZoneId.systemDefault());
-        return localTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm z"));
+        return formatLocalDateTime(timeUtc);
     }
 
     private String formatClockTime(LocalDateTime timeUtc) {
@@ -2314,8 +2388,23 @@ public class MainApp extends Application {
         if (appSettings.timeDisplayMode() == TimeDisplayMode.UTC) {
             return timeUtc.toLocalTime().format(CLOCK_FORMATTER) + " UTC";
         }
-        ZonedDateTime localTime = timeUtc.atOffset(ZoneOffset.UTC).atZoneSameInstant(ZoneId.systemDefault());
+        ZonedDateTime localTime = toLocalZonedDateTime(timeUtc);
         return localTime.format(DateTimeFormatter.ofPattern("HH:mm z"));
+    }
+
+    private String formatUtcDateTime(LocalDateTime timeUtc) {
+        return timeUtc == null ? "" : timeUtc.format(ROUTE_TIME_FORMATTER) + " UTC";
+    }
+
+    private String formatLocalDateTime(LocalDateTime timeUtc) {
+        if (timeUtc == null) {
+            return "";
+        }
+        return toLocalZonedDateTime(timeUtc).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm z"));
+    }
+
+    private ZonedDateTime toLocalZonedDateTime(LocalDateTime timeUtc) {
+        return timeUtc.atOffset(ZoneOffset.UTC).atZoneSameInstant(ZoneId.systemDefault());
     }
 
     private String formatObservationTime(String observationTime) {
