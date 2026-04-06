@@ -1,5 +1,5 @@
 .root {
-    -fx-font-family: "Arial";
+    -fx-font-family: "Bahnschrift SemiCondensed";
 }
 
 .scroll-pane {
@@ -29,22 +29,27 @@
 
 .tab-pane .tab-header-area {
     -fx-background-color: transparent;
-    -fx-padding: 0 24 0 24;
+    -fx-padding: 0 24 10 24;
 }
 
 .tab-pane .tab-header-background {
     -fx-background-color: transparent;
 }
 
+.tab-pane .headers-region {
+    -fx-background-color: transparent;
+}
+
 .tab-pane .tab {
-    -fx-border-radius: 14 14 0 0;
-    -fx-background-radius: 14 14 0 0;
-    -fx-padding: 10 20;
+    -fx-border-radius: 16;
+    -fx-background-radius: 16;
+    -fx-padding: 11 20;
 }
 
 .tab-pane .tab .tab-label {
-    -fx-font-size: 13px;
+    -fx-font-size: 12px;
     -fx-font-weight: bold;
+    -fx-letter-spacing: 0.6px;
 }
 
 .theme-nightfall .text-area {
@@ -87,12 +92,12 @@
 }
 
 .theme-nightfall .tab-pane .tab {
-    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-background-color: rgba(255,255,255,0.05);
     -fx-border-color: #27425f;
 }
 
 .theme-nightfall .tab-pane .tab:selected {
-    -fx-background-color: #1d3048;
+    -fx-background-color: linear-gradient(to bottom, #213954, #1b2f46);
     -fx-border-color: #5ec2ff;
 }
 
@@ -144,12 +149,12 @@
 }
 
 .theme-clearsky .tab-pane .tab {
-    -fx-background-color: rgba(255,255,255,0.7);
+    -fx-background-color: rgba(255,255,255,0.74);
     -fx-border-color: #b7cddd;
 }
 
 .theme-clearsky .tab-pane .tab:selected {
-    -fx-background-color: #ffffff;
+    -fx-background-color: linear-gradient(to bottom, #ffffff, #f2f8fc);
     -fx-border-color: #1577c8;
 }
 
