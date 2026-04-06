@@ -1532,6 +1532,8 @@ public class MainApp extends Application {
         for (RecentRouteEntry entry : recentRoutes) {
             Label routeLabel = new Label(entry.departureAirport() + " -> " + entry.destinationAirport());
             routeLabel.setStyle("-fx-text-fill: " + themePalette.textPrimary() + "; -fx-font-size: 13px; -fx-font-weight: bold;");
+            routeLabel.setWrapText(true);
+            routeLabel.setMaxWidth(Double.MAX_VALUE);
 
             String timestamp = "Saved departure " + entry.plannedDepartureUtc().format(ROUTE_TIME_FORMATTER)
                     + " UTC  |  Last used " + entry.lastUsedUtc().format(ROUTE_TIME_FORMATTER) + " UTC";
@@ -1553,11 +1555,10 @@ public class MainApp extends Application {
                 routeStatusLabel.setText("Route loaded. Adjust the UTC departure time, then click Analyze Route.");
             });
 
-            Region spacer = new Region();
-            HBox.setHgrow(spacer, Priority.ALWAYS);
-            HBox header = new HBox(10, routeLabel, spacer, useButton, editTimeButton);
+            HBox actionRow = new HBox(10, useButton, editTimeButton);
+            actionRow.setAlignment(Pos.CENTER_LEFT);
 
-            VBox routeCard = new VBox(4, header, metaLabel);
+            VBox routeCard = new VBox(8, routeLabel, metaLabel, actionRow);
             routeCard.setPadding(new Insets(12));
             routeCard.setStyle(
                     "-fx-background-color: " + themePalette.metricBackground() + "; -fx-border-color: " + themePalette.metricBorder() + "; " +
