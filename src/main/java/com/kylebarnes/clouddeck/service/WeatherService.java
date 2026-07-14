@@ -8,6 +8,7 @@ import com.kylebarnes.clouddeck.data.TafParser;
 import com.kylebarnes.clouddeck.model.AirportInfo;
 import com.kylebarnes.clouddeck.model.AirportWeather;
 import com.kylebarnes.clouddeck.model.MetarData;
+import com.kylebarnes.clouddeck.model.Notam;
 import com.kylebarnes.clouddeck.model.TafData;
 import org.json.JSONArray;
 
@@ -27,6 +28,23 @@ public class WeatherService {
     private final MetarParser metarParser;
     private final TafParser tafParser;
     private final OurAirportsRepository airportsRepository;
+    private final NotamService notamService;
+
+    public WeatherService(
+            AviationWeatherClient aviationWeatherClient,
+            TafClient tafClient,
+            MetarParser metarParser,
+            TafParser tafParser,
+            OurAirportsRepository airportsRepository,
+            NotamService notamService
+    ) {
+        this.aviationWeatherClient = aviationWeatherClient;
+        this.tafClient = tafClient;
+        this.metarParser = metarParser;
+        this.tafParser = tafParser;
+        this.airportsRepository = airportsRepository;
+        this.notamService = notamService;
+    }
 
     public WeatherService(
             AviationWeatherClient aviationWeatherClient,
@@ -35,11 +53,14 @@ public class WeatherService {
             TafParser tafParser,
             OurAirportsRepository airportsRepository
     ) {
-        this.aviationWeatherClient = aviationWeatherClient;
-        this.tafClient = tafClient;
-        this.metarParser = metarParser;
-        this.tafParser = tafParser;
-        this.airportsRepository = airportsRepository;
+        this(
+                aviationWeatherClient,
+                tafClient,
+                metarParser,
+                tafParser,
+                airportsRepository,
+                new NotamService()
+        );
     }
 
     public List<AirportWeather> fetchAirportWeather(String input) throws Exception {
@@ -69,6 +90,7 @@ public class WeatherService {
         }
 
         TafFetchResult tafFetchResult = fetchTafs(airportIds);
+        Map<String, List<Notam>> notamResults = notamService.fetchNotams(airportIds);
 
         metars.sort((left, right) ->
                 Integer.compare(airportIds.indexOf(left.airportId()), airportIds.indexOf(right.airportId()))
@@ -83,6 +105,7 @@ public class WeatherService {
                     tafFetchResult.tafByAirport().get(metar.airportId()),
                     airportsRepository.findRunways(metar.airportId()),
                     List.of(),
+                    notamResults.getOrDefault(metar.airportId(), List.of()),
                     tafFetchResult.statusMessage()
             ));
         }

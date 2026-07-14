@@ -378,7 +378,7 @@ public class UiHelper {
         if (ctx.appSettings.temperatureUnit() == TemperatureUnit.CELSIUS) {
             return formatOneDecimal(tempC) + " C";
         }
-        return formatOneDecimal((tempC * 9 / 5) + 32) + " F";
+        return formatOneDecimal((tempC * 9.0f / 5.0f) + 32) + " F";
     }
 
     String formatVisibility(float visibilitySm) {

@@ -18,6 +18,7 @@ import com.kylebarnes.clouddeck.service.FaaChartLinkService;
 import com.kylebarnes.clouddeck.service.FlightConditionEvaluator;
 import com.kylebarnes.clouddeck.service.FlightPlanningService;
 import com.kylebarnes.clouddeck.service.MetarTrendService;
+import com.kylebarnes.clouddeck.service.NotamService;
 import com.kylebarnes.clouddeck.service.OperationalAlertService;
 import com.kylebarnes.clouddeck.service.RunwayAnalysisService;
 import com.kylebarnes.clouddeck.service.SolarCalculatorService;
@@ -49,12 +50,14 @@ public class AppContext {
 
     // Services
     final OurAirportsRepository airportsRepository = new OurAirportsRepository();
+    final NotamService notamService = new NotamService();
     final WeatherService weatherService = new WeatherService(
             new AviationWeatherClient(),
             new TafClient(),
             new MetarParser(),
             new TafParser(),
-            airportsRepository
+            airportsRepository,
+            notamService
     );
     final FlightConditionEvaluator flightConditionEvaluator = new FlightConditionEvaluator();
     final RunwayAnalysisService runwayAnalysisService = new RunwayAnalysisService();

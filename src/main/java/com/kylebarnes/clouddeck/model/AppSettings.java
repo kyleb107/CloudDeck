@@ -19,6 +19,43 @@ public record AppSettings(
         int densityAltitudeCautionFt,
         int densityAltitudeWarningFt
 ) {
+    public AppSettings(
+            String homeAirport,
+            String defaultAircraftName,
+            ThemePreset themePreset,
+            TemperatureUnit temperatureUnit,
+            DistanceUnit distanceUnit,
+            double taxiFuelGallons,
+            double climbFuelGallons,
+            int groundspeedAdjustmentKts,
+            float vfrWarningVisibilitySm,
+            int vfrWarningCeilingFt,
+            float vfrCautionVisibilitySm,
+            int vfrCautionCeilingFt,
+            int densityAltitudeCautionFt,
+            int densityAltitudeWarningFt
+    ) {
+        this(
+                homeAirport,
+                defaultAircraftName,
+                themePreset,
+                temperatureUnit,
+                distanceUnit,
+                WindUnit.KNOTS,
+                AltimeterUnit.IN_HG,
+                TimeDisplayMode.UTC,
+                taxiFuelGallons,
+                climbFuelGallons,
+                groundspeedAdjustmentKts,
+                vfrWarningVisibilitySm,
+                vfrWarningCeilingFt,
+                vfrCautionVisibilitySm,
+                vfrCautionCeilingFt,
+                densityAltitudeCautionFt,
+                densityAltitudeWarningFt
+        );
+    }
+
     public static AppSettings defaults() {
         return new AppSettings(
                 "",

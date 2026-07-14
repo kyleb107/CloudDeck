@@ -11,6 +11,7 @@ import com.kylebarnes.clouddeck.model.Runway;
 import com.kylebarnes.clouddeck.model.SolarTimes;
 import com.kylebarnes.clouddeck.model.TimeDisplayMode;
 import com.kylebarnes.clouddeck.model.TimedRouteAssessment;
+import com.kylebarnes.clouddeck.model.WindVector;
 import com.kylebarnes.clouddeck.service.BriefingExportResult;
 import com.kylebarnes.clouddeck.service.DensityAltitudeAssessment;
 import com.kylebarnes.clouddeck.service.OperationalAlert;
@@ -49,6 +50,8 @@ public class RouteView {
     TextField routeDepartureInput;
     TextField routeDestinationInput;
     TextField routeDepartureTimeInput;
+    TextField routeWindDirInput;
+    TextField routeWindSpeedInput;
     ComboBox<TimeDisplayMode> routeTimeModeBox;
     Label routeTimeHelperLabel;
     Label routeStatusLabel;
@@ -80,6 +83,7 @@ public class RouteView {
         if (ctx.latestRouteDestination != null && !ctx.latestRouteDestination.isBlank()) {
             routeDestinationInput.setText(ctx.latestRouteDestination);
         }
+
         routeTimeModeBox = new ComboBox<>();
         routeTimeModeBox.getItems().setAll(TimeDisplayMode.UTC, TimeDisplayMode.LOCAL);
         routeTimeModeBox.setValue(ctx.appSettings.timeDisplayMode());
@@ -131,9 +135,10 @@ public class RouteView {
                     ctx.appSettings
             );
 
+            WindVector plannedWind = getPlannedWindVector();
             RoutePlan routePlan = aircraftProfile == null
                     ? null
-                    : ctx.flightPlanningService.planDirectRoute(departureAirport, destinationAirport, aircraftProfile, ctx.appSettings);
+                    : ctx.flightPlanningService.planDirectRoute(departureAirport, destinationAirport, aircraftProfile, ctx.appSettings, plannedWind);
             TimedRouteAssessment timedRouteAssessment = null;
             LocalDateTime departureTimeUtc = getPlannedDepartureTimeUtc();
             if (routePlan != null && departureTimeUtc != null) {
@@ -236,7 +241,10 @@ public class RouteView {
                     .filter(weather -> weather.metar().airportId().equalsIgnoreCase(ctx.latestRouteDestination))
                     .findFirst()
                     .orElse(null);
-            RoutePlan routePlan = ctx.flightPlanningService.planDirectRoute(departureAirport, destinationAirport, aircraftProfile, ctx.appSettings);
+
+            WindVector plannedWind = getPlannedWindVector();
+            RoutePlan routePlan = ctx.flightPlanningService.planDirectRoute(departureAirport, destinationAirport, aircraftProfile, ctx.appSettings, plannedWind);
+
             if (routePlan != null) {
                 departureTimeUtc = getPlannedDepartureTimeUtc();
                 if (departureTimeUtc != null) {
@@ -393,7 +401,7 @@ public class RouteView {
 
         return ui.createPanel(
                 "Airport Details",
-                "Expanded weather, runway, and chart context for each end of the route.",
+                "Expanded weather, NOTAMs, runway, and chart context for each end of the route.",
                 row
         );
     }
@@ -434,10 +442,10 @@ public class RouteView {
                 ui.createMetricCard("Temp", ui.formatTemperature(metar.tempC()), ctx.themePalette.successGreen())
         );
 
-        // Build sub-sections using WeatherView helpers via a temporary WeatherView
         WeatherView wv = new WeatherView(ctx, ui, openUrl);
         VBox sections = new VBox(
                 10,
+                wv.buildNotamSection(airportWeather.notams()),
                 wv.buildAirportBriefingSection(airportWeather.airportInfo(), metar),
                 wv.buildTrendSection(airportWeather),
                 wv.buildTafSection(airportWeather),
@@ -614,8 +622,11 @@ public class RouteView {
         FlowPane metrics = new FlowPane();
         metrics.setHgap(12);
         metrics.setVgap(12);
+
         metrics.getChildren().addAll(
                 ui.createMetricCard("Distance", ui.formatDistance(routePlan.distanceNm()), ctx.themePalette.accentBlue()),
+                ui.createMetricCard("True Course", formatHeading(routePlan.trueCourse()), ctx.themePalette.accentBlue()),
+                ui.createMetricCard("True Heading", formatHeading(routePlan.trueHeading()), ctx.themePalette.accentGold()),
                 ui.createMetricCard("Groundspeed", ui.formatSpeed(routePlan.groundspeedKts()), ctx.themePalette.cautionOrange()),
                 ui.createMetricCard("ETE", ui.formatDuration(routePlan.estimatedTimeHours()), ctx.themePalette.successGreen()),
                 ui.createMetricCard("Trip Fuel", ui.formatOneDecimal(routePlan.tripFuelGallons()) + " gal", ctx.themePalette.accentGold()),
@@ -667,14 +678,23 @@ public class RouteView {
                     destinationAirport.ident() + " density altitude: " + destinationDensity.densityAltitudeFt() + " ft"
             ));
         }
+
+        WindVector plannedWind = getPlannedWindVector();
+        if (plannedWind != null && plannedWind.speedKts() > 0) {
+            densityBox.getChildren().add(ui.createMutedLabel(
+                    "Groundspeed and heading calculated using Winds Aloft at " + String.format("%03d°", plannedWind.direction()) + " @ " + plannedWind.speedKts() + " kts resulting in a WCA of " + ui.formatOneDecimal(routePlan.windCorrectionAngle()) + "°."
+            ));
+        } else {
+            densityBox.getChildren().add(ui.createMutedLabel(
+                    "Groundspeed uses aircraft cruise " + ui.formatSpeed(aircraftProfile.cruiseSpeedKts()) + " with legacy "
+                            + ui.formatSignedSpeed(ctx.appSettings.groundspeedAdjustmentKts()) + " adjustment."
+            ));
+        }
+
         densityBox.getChildren().add(ui.createMutedLabel(
                 "Assumptions: taxi " + ui.formatOneDecimal(routePlan.taxiFuelGallons()) + " gal, climb "
                         + ui.formatOneDecimal(routePlan.climbFuelGallons()) + " gal, airborne burn "
                         + ui.formatOneDecimal(routePlan.airborneFuelGallons()) + " gal."
-        ));
-        densityBox.getChildren().add(ui.createMutedLabel(
-                "Groundspeed uses aircraft cruise " + ui.formatSpeed(aircraftProfile.cruiseSpeedKts()) + " with "
-                        + ui.formatSignedSpeed(ctx.appSettings.groundspeedAdjustmentKts()) + " adjustment."
         ));
 
         if (departureTimeUtc != null && arrivalTimeUtc != null) {
@@ -785,23 +805,53 @@ public class RouteView {
 
         VBox departureBox = new VBox(6, ui.formLabel("Departure"), routeDepartureInput);
         VBox destinationBox = new VBox(6, ui.formLabel("Destination"), routeDestinationInput);
+
+        // Wind Inputs
+        routeWindDirInput = ui.createInputField("Dir ex: 270", 110);
+        routeWindSpeedInput = ui.createInputField("Spd ex: 15", 110);
+        HBox windInputs = new HBox(6, routeWindDirInput, routeWindSpeedInput);
+        VBox windsAloftBox = new VBox(6, ui.formLabel("Winds Aloft (Optional)"), windInputs);
+
         VBox timeBox = new VBox(6, ui.formLabel("Departure Time"), routeDepartureTimeInput, routeTimeHelperLabel);
         VBox timeModeBox = new VBox(6, ui.formLabel("Time Input"), routeTimeModeBox);
 
-        HBox firstRow = new HBox(12, departureBox, destinationBox, timeBox, timeModeBox);
+        HBox firstRow = new HBox(12, departureBox, destinationBox, windsAloftBox);
         HBox.setHgrow(departureBox, Priority.ALWAYS);
         HBox.setHgrow(destinationBox, Priority.ALWAYS);
+        HBox.setHgrow(windsAloftBox, Priority.NEVER);
+
+        HBox secondRow = new HBox(12, timeBox, timeModeBox);
         HBox.setHgrow(timeBox, Priority.ALWAYS);
         HBox.setHgrow(timeModeBox, Priority.NEVER);
 
         Label plannerHint = ui.createMutedLabel(
-                "Uses the selected aircraft profile plus route assumptions from Settings. Enter UTC or local time, then CloudDeck converts it internally to UTC."
+                "Uses the selected aircraft profile plus route assumptions from Settings. Enter UTC or local time, then CloudDeck converts it internally to UTC. Provide winds aloft for true heading and accurate groundspeeds."
         );
         HBox actionRow = new HBox(10, planButton, exportButton);
         actionRow.setAlignment(Pos.CENTER_LEFT);
 
-        fields.getChildren().addAll(firstRow, plannerHint, actionRow);
+        fields.getChildren().addAll(firstRow, secondRow, plannerHint, actionRow);
         return fields;
+    }
+
+    WindVector getPlannedWindVector() {
+        if (routeWindDirInput.getText().isBlank() || routeWindSpeedInput.getText().isBlank()) {
+            return null;
+        }
+        try {
+            int dir = Integer.parseInt(routeWindDirInput.getText().trim());
+            int speed = Integer.parseInt(routeWindSpeedInput.getText().trim());
+            if (dir < 0 || dir > 360 || speed < 0) {
+                return null;
+            }
+            return new WindVector(dir, speed);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private String formatHeading(double heading) {
+        return String.format("%03d°", Math.floorMod(Math.round(heading), 360));
     }
 
     void analyzeRouteFromInputs() {
@@ -832,7 +882,7 @@ public class RouteView {
         populateRouteInputs(departure, destination, plannedDepartureUtc);
 
         ctx.routeResultsBox.getChildren().setAll(routeStatusLabel);
-        routeStatusLabel.setText("Fetching route weather and forecast data...");
+        routeStatusLabel.setText("Fetching route weather, NOTAMs, and forecast data...");
 
         ctx.runAsync(
                 () -> ctx.weatherService.fetchAirportWeather(departure + "," + destination),

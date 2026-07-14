@@ -67,7 +67,7 @@ public class MetarTrendService {
             return Integer.MAX_VALUE;
         }
         return cloudLayers.stream()
-                .filter(layer -> "BKN".equals(layer.cover()) || "OVC".equals(layer.cover()))
+                .filter(layer -> "BKN".equals(layer.cover()) || "OVC".equals(layer.cover()) || "VV".equals(layer.cover()))
                 .mapToInt(CloudLayer::baseFt)
                 .min()
                 .orElse(Integer.MAX_VALUE);

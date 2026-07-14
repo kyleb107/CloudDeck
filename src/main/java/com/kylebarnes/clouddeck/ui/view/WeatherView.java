@@ -5,12 +5,14 @@ import com.kylebarnes.clouddeck.model.AirportInfo;
 import com.kylebarnes.clouddeck.model.AirportWeather;
 import com.kylebarnes.clouddeck.model.CrosswindComponents;
 import com.kylebarnes.clouddeck.model.MetarData;
+import com.kylebarnes.clouddeck.model.Notam;
 import com.kylebarnes.clouddeck.model.Runway;
 import com.kylebarnes.clouddeck.model.SolarTimes;
 import com.kylebarnes.clouddeck.model.TafData;
 import com.kylebarnes.clouddeck.model.TafPeriod;
 import com.kylebarnes.clouddeck.service.CrosswindCalculator;
 import com.kylebarnes.clouddeck.service.DensityAltitudeAssessment;
+import com.kylebarnes.clouddeck.service.MetarTrendService;
 import com.kylebarnes.clouddeck.service.MetarTrendSummary;
 import com.kylebarnes.clouddeck.service.RunwayAnalysis;
 import com.kylebarnes.clouddeck.service.VfrAssessment;
@@ -82,7 +84,7 @@ public class WeatherView {
             }
 
             ctx.weatherCardsContainer.getChildren().clear();
-            statusLabel.setText("Fetching METAR, TAF, and runway data...");
+            statusLabel.setText("Fetching METAR, TAF, NOTAMs, and runway data...");
 
             ctx.runAsync(
                     () -> ctx.weatherService.fetchAirportWeather(input),
@@ -222,6 +224,7 @@ public class WeatherView {
                 "Clouds: " + metar.cloudLayersSummary() + "  |  Observation: " + ui.formatObservationTime(metar.observationTime())
         );
 
+        VBox notamSection = buildNotamSection(airportWeather.notams());
         VBox airportBriefingSection = buildAirportBriefingSection(airportInfo, metar);
         VBox trendSection = buildTrendSection(airportWeather);
         VBox tafSection = buildTafSection(airportWeather);
@@ -231,11 +234,36 @@ public class WeatherView {
         rawLabel.setStyle(ui.monospaceMutedStyle());
         rawLabel.setWrapText(true);
 
-        card.getChildren().addAll(header, stationBanner, metricStrip, vfrLabel, detailsLabel, airportBriefingSection, trendSection, tafSection, runwaySection, rawLabel);
+        card.getChildren().addAll(header, stationBanner, metricStrip, vfrLabel, detailsLabel, notamSection, airportBriefingSection, trendSection, tafSection, runwaySection, rawLabel);
         return card;
     }
 
-    VBox buildAirportBriefingSection(AirportInfo airportInfo, MetarData metar) {
+    public VBox buildNotamSection(List<Notam> notams) {
+        VBox section = new VBox(6);
+        section.getChildren().add(new Separator());
+        section.getChildren().add(ui.createSubsectionTitle("Notices to Air Missions (NOTAMs)"));
+
+        if (notams == null || notams.isEmpty()) {
+            section.getChildren().add(ui.createMutedLabel("No active NOTAMs returned for this station."));
+            return section;
+        }
+
+        for (Notam notam : notams) {
+            Label notamLabel = ui.makeInfoLabel(notam.id() + " - " + notam.rawText());
+            notamLabel.setStyle("-fx-text-fill: " + ctx.themePalette.cautionOrange() + "; -fx-font-size: 12px; -fx-font-weight: bold;");
+            notamLabel.setWrapText(true);
+
+            Label effectiveLabel = ui.createMutedLabel("Effective: " + notam.effectiveStart() + " to " + notam.effectiveEnd());
+
+            VBox notamBox = new VBox(2, notamLabel, effectiveLabel);
+            notamBox.setPadding(new Insets(6, 0, 6, 0));
+            section.getChildren().add(notamBox);
+        }
+
+        return section;
+    }
+
+    public VBox buildAirportBriefingSection(AirportInfo airportInfo, MetarData metar) {
         VBox section = new VBox(6);
         section.getChildren().add(new Separator());
         section.getChildren().add(ui.createSubsectionTitle("Airport Briefing"));
@@ -305,7 +333,7 @@ public class WeatherView {
         return chartBox;
     }
 
-    VBox buildTrendSection(AirportWeather airportWeather) {
+    public VBox buildTrendSection(AirportWeather airportWeather) {
         VBox section = new VBox(6);
         section.getChildren().add(new Separator());
         section.getChildren().add(ui.createSubsectionTitle("Trend Snapshot"));
@@ -422,7 +450,7 @@ public class WeatherView {
         );
     }
 
-    VBox buildTafSection(AirportWeather airportWeather) {
+    public VBox buildTafSection(AirportWeather airportWeather) {
         VBox section = new VBox(6);
         section.getChildren().add(new Separator());
         section.getChildren().add(ui.createSubsectionTitle("TAF Outlook"));
@@ -450,8 +478,8 @@ public class WeatherView {
         int periodsToShow = Math.min(3, taf.periods().size());
         for (int index = 0; index < periodsToShow; index++) {
             TafPeriod period = taf.periods().get(index);
-            VfrAssessment assessment = ui.assessTafPeriod(period);
-            Label periodLabel = ui.makeInfoLabel(ui.formatTafPeriod(period, assessment));
+            VfrAssessment assessment = assessTafPeriod(period);
+            Label periodLabel = ui.makeInfoLabel(formatTafPeriod(period, assessment));
             periodLabel.setStyle("-fx-text-fill: " + ctx.themePalette.textPrimary() + "; -fx-font-size: 12px;");
             periodLabel.setWrapText(true);
             section.getChildren().add(periodLabel);
@@ -468,7 +496,37 @@ public class WeatherView {
         return section;
     }
 
-    VBox buildRunwaySection(MetarData metar, List<Runway> runways, String accentColor, AircraftProfile aircraftProfile) {
+    private VfrAssessment assessTafPeriod(TafPeriod period) {
+        return ctx.flightConditionEvaluator.assessVfr(new MetarData(
+                "", "", "", "",
+                period.windDir() == null ? 0 : period.windDir(),
+                period.windSpeed(),
+                period.windGust(),
+                0f, "",
+                period.cloudLayers(),
+                0f,
+                period.visibilitySm() == null ? 10f : period.visibilitySm()
+        ), ctx.appSettings);
+    }
+
+    private String formatTafPeriod(TafPeriod period, VfrAssessment assessment) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(period.label()).append(": ").append(assessment == null ? "Forecast available" : assessment.level());
+
+        if (period.visibilitySm() != null) {
+            builder.append(" | Vis ").append(ui.formatVisibility(period.visibilitySm()));
+        }
+        if (!period.cloudLayers().isEmpty()) {
+            builder.append(" | ").append(period.cloudLayersSummary());
+        }
+        if (!period.weatherTokens().isEmpty()) {
+            builder.append(" | Wx ").append(String.join(" ", period.weatherTokens()));
+        }
+
+        return builder.toString();
+    }
+
+    public VBox buildRunwaySection(MetarData metar, List<Runway> runways, String accentColor, AircraftProfile aircraftProfile) {
         VBox section = new VBox(6);
         section.getChildren().add(new Separator());
         section.getChildren().add(ui.createSubsectionTitle("Runway Suitability"));
@@ -523,8 +581,8 @@ public class WeatherView {
             runwayLabel.setStyle(analysis.exceedsAircraftLimit()
                     ? "-fx-text-fill: " + ctx.themePalette.warningRed() + "; -fx-font-size: 12px; -fx-font-weight: bold;"
                     : analysis.bestOption()
-                    ? "-fx-text-fill: " + accentColor + "; -fx-font-size: 12px; -fx-font-weight: bold;"
-                    : "-fx-text-fill: " + ctx.themePalette.textPrimary() + "; -fx-font-size: 12px;");
+                      ? "-fx-text-fill: " + accentColor + "; -fx-font-size: 12px; -fx-font-weight: bold;"
+                      : "-fx-text-fill: " + ctx.themePalette.textPrimary() + "; -fx-font-size: 12px;");
             section.getChildren().add(runwayLabel);
         }
 
